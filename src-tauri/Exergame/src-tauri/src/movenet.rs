@@ -384,6 +384,8 @@ fn pose_session() -> Result<&'static Mutex<Session>, String> {
 #[serde(rename_all = "camelCase")]
 pub struct Keypoint {
     pub name: &'static str,
+    /// Normalized to the frame: 0..1 on both axes. The frontend scales the
+    /// points to the canvas size itself.
     pub x: f32,
     pub y: f32,
     pub score: f32,
@@ -561,15 +563,18 @@ pub fn recognize_frame(width: u32, height: u32, rgb: &[u8]) -> Result<PoseEstima
         .enumerate()
         .map(|(index, name)| {
             let base = index * 3;
-            // MoveNet outputs (y, x, score), normalized to 0..1.
+            // MoveNet outputs (y, x, score), normalized to 0..1 over the
+            // model input. The keypoints are returned normalized to the
+            // frame (0..1): the frontend scales them to the canvas, keeping
+            // a single mapping implementation for every platform.
             let y = raw[base];
             let x = raw[base + 1];
             let score = raw[base + 2];
 
             Keypoint {
                 name,
-                x: (x * MOVENET_INPUT_SIZE as f32 - pad_x as f32) * scale_x,
-                y: (y * MOVENET_INPUT_SIZE as f32 - pad_y as f32) * scale_y,
+                x: (x * MOVENET_INPUT_SIZE as f32 - pad_x as f32) * scale_x / width as f32,
+                y: (y * MOVENET_INPUT_SIZE as f32 - pad_y as f32) * scale_y / height as f32,
                 score,
             }
         })

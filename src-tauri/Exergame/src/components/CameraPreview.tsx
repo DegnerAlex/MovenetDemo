@@ -1,7 +1,8 @@
 import {Component, createRef} from "react";
 import {Button, Tag} from "react-bulma-components";
-import {PoseSkeleton} from "./PoseSkeleton";
 import type {PoseEstimate, PoseStats} from "./PoseSkeleton";
+import {PoseSkeleton} from "./PoseSkeleton";
+import {error} from "@tauri-apps/plugin-log";
 
 type Resolution = {
     width: number;
@@ -161,6 +162,7 @@ export class CameraPreview extends Component<CameraPreviewProps, CameraPreviewSt
 
         try {
             const json = new TextDecoder().decode(new Uint8Array(buffer, offset, length));
+
             const pose = JSON.parse(json) as PoseEstimate;
             this.setState({
                 pose,
@@ -170,8 +172,8 @@ export class CameraPreview extends Component<CameraPreviewProps, CameraPreviewSt
                     provider: pose.provider,
                 },
             });
-        } catch {
-            // A corrupted JSON tail is simply ignored.
+        } catch (ex) {
+            error(`??${ex}`);
         }
     }
 
@@ -217,7 +219,8 @@ export class CameraPreview extends Component<CameraPreviewProps, CameraPreviewSt
                     />
                     <PoseSkeleton pose={pose} mirror={mirror}/>
                 </div>
-                <div className={`mt-2 is-flex is-flex-wrap-wrap is-justify-content-space-between is-align-items-center${isStreaming ? " status-card" : ""}`} style={{gap: "0.5rem", flexShrink: 0, position: "relative", zIndex: 1}}>
+                <div className={`mt-2 is-flex is-flex-wrap-wrap is-justify-content-space-between is-align-items-center${isStreaming ? " status-card" : ""}`}
+                     style={{gap: "0.5rem", flexShrink: 0, position: "relative", zIndex: 1}}>
                     <div className="is-flex is-flex-wrap-wrap is-align-items-center" style={{gap: "0.5rem"}}>
                         {resolution && (
                             <Tag>{`${resolution.width}×${resolution.height}`}</Tag>

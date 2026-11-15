@@ -1179,6 +1179,7 @@ name = "exergame"
 version = "0.1.0"
 dependencies = [
  "jpeg-decoder",
+ "libc",
  "libloading 0.9.1",
  "nokhwa",
  "ort",

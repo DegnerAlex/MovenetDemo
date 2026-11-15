@@ -32,6 +32,7 @@ const SKELETON_LINE_WIDTH = 6;
 
 export type PoseKeypoint = {
     name: string;
+    /** Normalized to the frame (0..1); scaled to the canvas for drawing. */
     x: number;
     y: number;
     score: number;
@@ -116,10 +117,18 @@ export class PoseSkeleton extends Component<PoseSkeletonProps> {
         const width = pose.width;
         const height = pose.height;
 
+        // Keypoints arrive normalized to the frame (0..1): scale them to the
+        // canvas once, so every drawing below works in canvas pixels.
+        const points: PoseKeypoint[] = pose.keypoints.map((keypoint) => ({
+            ...keypoint,
+            x: keypoint.x * width,
+            y: keypoint.y * height,
+        }));
+
         // Central points of the shoulders and the pelvis, connected by a spine
         // line (the side shoulder→hip lines are intentionally not drawn).
-        const shoulderCenter = midpoint(pose.keypoints[5], pose.keypoints[6]);
-        const hipCenter = midpoint(pose.keypoints[11], pose.keypoints[12]);
+        const shoulderCenter = midpoint(points[5], points[6]);
+        const hipCenter = midpoint(points[11], points[12]);
 
         // MoveNet quirk: when the pelvis sits at the very bottom of the frame
         // and the knee/ankle points land above it, the legs are hallucinated
@@ -127,7 +136,7 @@ export class PoseSkeleton extends Component<PoseSkeletonProps> {
         let hideLegs = false;
         if (hipCenter && hipCenter.y > height * PELVIS_BOTTOM_MARGIN_RATIO) {
             const visibleLegPoints = LEG_KEYPOINT_INDICES
-                .map((index) => pose.keypoints[index])
+                .map((index) => points[index])
                 .filter((point) => point && point.score >= MIN_KEYPOINT_SCORE);
 
             hideLegs =
@@ -139,10 +148,10 @@ export class PoseSkeleton extends Component<PoseSkeletonProps> {
 
         // Face: the eyes connect to their center, the center connects to the
         // nose.
-        const eyeCenter = midpoint(pose.keypoints[1], pose.keypoints[2]);
-        const nose = pose.keypoints[0];
-        const leftEye = pose.keypoints[1];
-        const rightEye = pose.keypoints[2];
+        const eyeCenter = midpoint(points[1], points[2]);
+        const nose = points[0];
+        const leftEye = points[1];
+        const rightEye = points[2];
 
         context.save();
         const radius = (KEYPOINT_RADIUS * width) / KEYPOINT_REFERENCE_WIDTH;
@@ -153,8 +162,8 @@ export class PoseSkeleton extends Component<PoseSkeletonProps> {
         context.lineWidth = lineWidth;
         context.lineCap = "round";
         for (const [from, to] of POSE_EDGES) {
-            const a = pose.keypoints[from];
-            const b = pose.keypoints[to];
+            const a = points[from];
+            const b = points[to];
             if (
                 !a || !b
                 || a.score < MIN_KEYPOINT_SCORE
@@ -201,7 +210,7 @@ export class PoseSkeleton extends Component<PoseSkeletonProps> {
 
         // Joints.
         context.fillStyle = "#ffffff";
-        pose.keypoints.forEach((keypoint, index) => {
+        points.forEach((keypoint, index) => {
             if (keypoint.score < MIN_KEYPOINT_SCORE) {
                 return;
             }

@@ -20,14 +20,23 @@ fn main() {
     let is_android = target.contains("android");
 
     if is_android {
-        if !bundle_dir.exists() {
-            fs::create_dir_all(bundle_dir).expect("failed to create ort-gpu-bundle");
-            fs::write(
-                bundle_dir.join("CPU_ONLY_BUILD.txt"),
-                "Android build: ONNX Runtime ships as a JNI library, not from here.\n",
-            )
-            .expect("failed to write bundle marker");
-        }
+        // Android must not pack the desktop GPU runtime: the ARM ONNX
+        // Runtime ships as a JNI library, and the CUDA/cuDNN libraries in
+        // the bundle directory are x86_64 builds that would bloat the APK
+        // by gigabytes. Reset the directory to just the marker so the
+        // resources glob matches while staying empty of GPU files.
+        //
+        // Desktop builds recreate the full GPU bundle from scratch on their
+        // next run (see below), which makes sequential desktop and Android
+        // builds self-healing. Truly parallel builds can still race on this
+        // directory — keep them sequential (the Makefile chains them).
+        let _ = fs::remove_dir_all(bundle_dir);
+        fs::create_dir_all(bundle_dir).expect("failed to create ort-gpu-bundle");
+        fs::write(
+            bundle_dir.join("CPU_ONLY_BUILD.txt"),
+            "Android build: ONNX Runtime ships as a JNI library, not from here.\n",
+        )
+        .expect("failed to write bundle marker");
     } else {
         // Desktop: rebuild from scratch on every run, so a marker left by an
         // Android build never survives into a packaged bundle.

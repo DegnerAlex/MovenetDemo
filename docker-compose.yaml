@@ -55,6 +55,8 @@ services:
       - cargo-registry:/root/.cargo/registry
     devices:
       - /dev/video0:/dev/video0
+      - /dev/video1:/dev/video2
+      - /dev/video2:/dev/video2
       - /dev/fuse:/dev/fuse
 
     working_dir: /srv

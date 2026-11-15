@@ -12,10 +12,17 @@ export type CameraDescriptor = {
     name: string;
 };
 
+// One resolution entry from the backend: the FPS comes with the desktop
+// backend (read from the camera's frame intervals); Android leaves it out.
+export type ResolutionInfo = {
+    resolution: string;
+    maxFps?: number | null;
+};
+
 type CameraSettingsProps = {
     cameras: CameraDescriptor[];
     selectedCamera: string;
-    resolutions: string[];
+    resolutions: ResolutionInfo[];
     selectedResolution: string;
     isLoadingCameras: boolean;
     isLoadingResolutions: boolean;
@@ -109,18 +116,21 @@ export function CameraSettings(props: CameraSettingsProps) {
                     className="is-flex-wrap-wrap mt-2"
                 >
                     {resolutions.map((value) => {
-                        const isSelected = value === selectedResolution;
+                        const isSelected = value.resolution === selectedResolution;
+                        const label = value.maxFps
+                            ? `${value.resolution} · ${value.maxFps} FPS`
+                            : value.resolution;
 
                         return (
                             <Button
-                                key={value}
+                                key={value.resolution}
                                 size="small"
                                 color={isSelected ? "info" : undefined}
                                 aria-pressed={isSelected}
-                                onClick={() => onResolutionSelect(value)}
+                                onClick={() => onResolutionSelect(value.resolution)}
                                 disabled={isStreaming || isStartingCamera}
                             >
-                                {value}
+                                {label}
                             </Button>
                         );
                     })}

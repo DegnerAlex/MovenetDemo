@@ -267,14 +267,12 @@ class ExergameCameraPlugin(private val activity: Activity) : Plugin(activity) {
 
                 // Body-pose detection (MoveNet via LiteRT, GPU delegate when
                 // available) on a capped copy: the detection preprocessing
-                // stays cheap at high camera resolutions.
+                // stays cheap at high camera resolutions. The keypoints come
+                // back normalized to the frame (0..1).
                 val analysisBitmap = downscaleForDetection(bitmap)
                 val result = detector.detect(analysisBitmap)
 
-                // The keypoints come back in analysis-bitmap coordinates; map
-                // them back to the full frame for the frontend skeleton.
-                val factor = bitmap.width.toDouble() / analysisBitmap.width
-                latestKeypoints = keypointsToJsArray(result.keypoints, factor)
+                latestKeypoints = keypointsToJsArray(result.keypoints)
                 latestInferenceMs = result.inferenceMs
                 latestPreprocessMs = result.preprocessMs
                 providerKind = result.provider
@@ -317,13 +315,13 @@ class ExergameCameraPlugin(private val activity: Activity) : Plugin(activity) {
         return Bitmap.createScaledBitmap(bitmap, ANALYSIS_MAX_WIDTH, height, true)
     }
 
-    private fun keypointsToJsArray(keypoints: List<NamedKeypoint>, factor: Double): JSArray {
+    private fun keypointsToJsArray(keypoints: List<NamedKeypoint>): JSArray {
         val arr = JSArray()
         for (keypoint in keypoints) {
             val obj = JSObject()
             obj.put("name", keypoint.name)
-            obj.put("x", keypoint.x * factor)
-            obj.put("y", keypoint.y * factor)
+            obj.put("x", keypoint.x)
+            obj.put("y", keypoint.y)
             obj.put("score", keypoint.score)
             arr.put(obj)
         }

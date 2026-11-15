@@ -200,8 +200,12 @@ class MovenetDetector(context: Context) {
         srcWidth: Int,
         srcHeight: Int
     ): List<NamedKeypoint> {
-        val scaleX = srcWidth.toFloat() / INPUT_SIZE
-        val scaleY = srcHeight.toFloat() / INPUT_SIZE
+        // The letterbox placed the frame at `pad*` with the scale
+        // srcWidth / scaledWidth. The keypoints are returned normalized to
+        // the source frame (0..1): the frontend scales them to the canvas,
+        // so no per-platform pixel mapping is needed anywhere.
+        val scaledW = (INPUT_SIZE - 2 * padX).coerceAtLeast(1)
+        val scaledH = (INPUT_SIZE - 2 * padY).coerceAtLeast(1)
 
         val keypoints = mutableListOf<NamedKeypoint>()
         for (i in KEYPOINT_NAMES.indices) {
@@ -209,9 +213,8 @@ class MovenetDetector(context: Context) {
             val xNorm = points[i][1]
             val score = points[i][2]
 
-            // Map the model coordinates back to the source frame.
-            val x = ((xNorm * INPUT_SIZE - padX) / scaleX).toDouble()
-            val y = ((yNorm * INPUT_SIZE - padY) / scaleY).toDouble()
+            val x = ((xNorm * INPUT_SIZE - padX) / scaledW).toDouble().coerceIn(0.0, 1.0)
+            val y = ((yNorm * INPUT_SIZE - padY) / scaledH).toDouble().coerceIn(0.0, 1.0)
 
             keypoints.add(NamedKeypoint(KEYPOINT_NAMES[i], x, y, score.toDouble()))
         }

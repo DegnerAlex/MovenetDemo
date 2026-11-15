@@ -21,6 +21,17 @@ use camera::CameraStreamState;
 use camera_android::CameraStreamState;
 
 use tauri::{Manager, RunEvent, WindowEvent};
+use serde::Serialize;
+
+/// A camera resolution with its maximum supported frame rate when known:
+/// the desktop reads it from the camera's frame intervals, Android does not
+/// expose it yet.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolutionInfo {
+    pub resolution: String,
+    pub max_fps: Option<u32>,
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

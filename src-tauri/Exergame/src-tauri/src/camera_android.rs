@@ -19,6 +19,8 @@ use tauri::{
     ipc::{Channel, Response},
     AppHandle, Manager, Runtime, State,
 };
+
+use crate::ResolutionInfo;
 use tauri_plugin_exergame_camera::Camera;
 
 #[derive(Clone, Serialize)]
@@ -85,11 +87,13 @@ pub fn list_cameras<R: Runtime>(app: AppHandle<R>) -> Result<Vec<CameraDescripto
 pub fn list_resolutions<R: Runtime>(
     camera_index: String,
     app: AppHandle<R>,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<ResolutionInfo>, String> {
     let camera = app.state::<Camera<R>>();
     let mut resolutions = camera.list_resolutions(Some(camera_index))?;
 
     // Largest first; drop duplicates (the same size in several layouts).
+    // The plugin does not expose frame rate ranges yet, so the FPS field
+    // stays empty on Android.
     resolutions.sort_unstable_by(|a, b| {
         let area = |value: &String| -> u64 {
             let (w, h) = value
@@ -102,7 +106,13 @@ pub fn list_resolutions<R: Runtime>(
     });
     resolutions.dedup();
 
-    Ok(resolutions)
+    Ok(resolutions
+        .into_iter()
+        .map(|resolution| ResolutionInfo {
+            resolution,
+            max_fps: None,
+        })
+        .collect())
 }
 
 #[tauri::command(async)]

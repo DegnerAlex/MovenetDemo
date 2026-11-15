@@ -4,14 +4,14 @@ import "./App.css";
 import {error, info} from "@tauri-apps/plugin-log";
 import {CameraPreview} from "./components/CameraPreview";
 import {CameraSettings} from "./components/CameraSettings";
-import type {CameraDescriptor} from "./components/CameraSettings";
+import type {CameraDescriptor, ResolutionInfo} from "./components/CameraSettings";
 
 type AppProps = Record<string, never>;
 
 type AppState = {
     cameras: CameraDescriptor[];
     selectedCamera: string;
-    resolutions: string[];
+    resolutions: ResolutionInfo[];
     selectedResolution: string;
     isLoadingCameras: boolean;
     isLoadingResolutions: boolean;
@@ -80,14 +80,14 @@ class App extends Component<AppProps, AppState> {
         this.setState({isLoadingResolutions: true, resolutions: [], selectedResolution: ""});
 
         try {
-            const resolutions = await invoke<string[]>("list_resolutions", {cameraIndex});
+            const resolutions = await invoke<ResolutionInfo[]>("list_resolutions", {cameraIndex});
             await info(`list_resolutions: ${resolutions.length} for camera ${cameraIndex}`);
 
             this.setState({
                 resolutions,
                 // Default to the smallest resolution (the list is sorted from
                 // the largest one downwards).
-                selectedResolution: resolutions[resolutions.length - 1] ?? "",
+                selectedResolution: resolutions[resolutions.length - 1]?.resolution ?? "",
                 isLoadingResolutions: false,
             });
         } catch (err) {

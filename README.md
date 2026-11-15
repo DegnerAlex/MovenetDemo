@@ -36,3 +36,17 @@ The artifacts land at:
 
 - `src-tauri/Exergame/src-tauri/target/release/bundle/appimage/movenet-demo_0.1.0_amd64.AppImage`
 - `src-tauri/Exergame/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk` (and the `.aab` next to it)
+
+## GPU support
+
+| Platform | Hardware | Provider | Notes |
+| --- | --- | --- | --- |
+| Desktop | NVIDIA | CUDA | automatic with a recent driver; the runtime is bundled into the AppImage |
+| Desktop | AMD | ROCm | needs an ONNX Runtime ROCm build at `/opt/onnxruntime-rocm` (container image) |
+| Desktop | Intel iGPU | — | not yet; possible via the OpenVINO execution provider (not wired up) |
+| Desktop | no GPU | CPU | automatic fallback, works everywhere |
+| Android | Adreno / Mali / Immortalis / PowerVR | LiteRT GPU delegate (OpenCL) | automatic CPU fallback when the delegate cannot start |
+
+`EXERGAME_FORCE_CPU=1` forces the CPU provider even when a GPU is present.
+The badge under the preview always shows which provider actually runs the
+model (`MoveNet: GPU` / `MoveNet: CPU`).

@@ -1,11 +1,13 @@
 use nokhwa::{
-    pixel_format::RgbFormat,
+    pixel_format::{RgbFormat, YuyvFormat},
     query,
     utils::{ApiBackend, CameraIndex, RequestedFormat, RequestedFormatType, Resolution},
     Camera,
 };
 use serde::Serialize;
 use std::{
+    collections::HashMap,
+    os::fd::AsRawFd,
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc, Arc, Mutex,
@@ -14,7 +16,7 @@ use std::{
 };
 use tauri::ipc::{Channel, Response};
 
-use crate::movenet;
+use crate::{movenet, ResolutionInfo};
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -62,9 +64,7 @@ pub fn list_cameras() -> Result<Vec<CameraDescriptor>, String> {
             // (e.g. metadata-only nodes) enumerate fine but support no
             // capture format, which makes Camera::new fail with
             // "Failed to Fufill" later on.
-            let requested =
-                RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate);
-            if Camera::new(parse_camera_index(&index), requested).is_err() {
+            if open_camera(parse_camera_index(&index), None).is_err() {
                 return None;
             }
 
@@ -74,6 +74,119 @@ pub fn list_cameras() -> Result<Vec<CameraDescriptor>, String> {
             })
         })
         .collect())
+}
+
+/// Opens a camera trying the RGB format preference first, then YUYV: virtual
+/// cameras (the OBS loopback, for example) expose a single raw format — most
+/// often YUYV — which the RGB preference alone may not negotiate. Every
+/// frame is decoded to RGB later anyway, so the caller never sees the
+/// difference.
+///
+/// On the "Framerate not whole number" failure the camera's frame interval
+/// is normalized first: UVC cameras with auto exposure report the actual
+/// (fractional) frame rate through V4L2, and the nokhwa V4L2 backend refuses
+/// to open such a camera. Rounding the interval down to a whole frame rate
+/// makes the camera openable again.
+fn open_camera(index: CameraIndex, resolution: Option<Resolution>) -> Result<Camera, String> {
+    let kind = match resolution {
+        Some(res) => RequestedFormatType::HighestResolution(res),
+        None => RequestedFormatType::AbsoluteHighestFrameRate,
+    };
+
+    let device = match &index {
+        CameraIndex::Index(device) => Some(*device),
+        _ => None,
+    };
+
+    let mut last_error = String::from("no format could open the camera");
+
+    // RGB: the format the regular webcams negotiate.
+    match Camera::new(index.clone(), RequestedFormat::new::<RgbFormat>(kind)) {
+        Ok(camera) => return Ok(camera),
+        Err(err) => last_error = err.to_string(),
+    }
+    if last_error.contains("not whole number") && device.is_some() {
+        let _ = normalize_frame_interval(device.expect("checked above"));
+        if let Ok(camera) = Camera::new(index.clone(), RequestedFormat::new::<RgbFormat>(kind)) {
+            return Ok(camera);
+        }
+    }
+
+    // YUYV: the format virtual cameras (OBS loopback) expose.
+    match Camera::new(index.clone(), RequestedFormat::new::<YuyvFormat>(kind)) {
+        Ok(camera) => return Ok(camera),
+        Err(err) => last_error = err.to_string(),
+    }
+    if last_error.contains("not whole number") && device.is_some() {
+        let _ = normalize_frame_interval(device.expect("checked above"));
+        if let Ok(camera) = Camera::new(index.clone(), RequestedFormat::new::<YuyvFormat>(kind)) {
+            return Ok(camera);
+        }
+    }
+
+    Err(last_error)
+}
+
+const V4L2_BUF_TYPE_VIDEO_CAPTURE: u32 = 1;
+
+const fn v4l2_iowr(nr: u32) -> u32 {
+    // sizeof(struct v4l2_streamparm) == 804 (type + the 200-u32 union).
+    (3 << 30) | (804 << 16) | (0x56 << 8) | nr
+}
+
+const VIDIOC_G_PARM: u32 = v4l2_iowr(59);
+const VIDIOC_S_PARM: u32 = v4l2_iowr(62);
+
+/// The kernel `struct v4l2_streamparm`, flattened: `type` followed by the
+/// 200-`u32` union. Only the capture member is used, whose layout inside the
+/// union is fixed by the kernel ABI: capability, timeperframe (numerator,
+/// denominator), capturemode, …
+#[repr(C)]
+struct V4l2Streamparm {
+    param_type: u32,
+    data: [u32; 200],
+}
+
+/// Rounds the camera's current frame rate down to a whole number (V4L2
+/// timeperframe), so the nokhwa V4L2 backend accepts the camera.
+fn normalize_frame_interval(device: u32) -> Result<(), String> {
+    let path = format!("/dev/video{device}");
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&path)
+        .map_err(|err| format!("cannot open {path}: {err}"))?;
+
+    let mut parm = V4l2Streamparm {
+        param_type: V4L2_BUF_TYPE_VIDEO_CAPTURE,
+        data: [0; 200],
+    };
+
+    // SAFETY: a plain VIDIOC_G_PARM ioctl with a correctly sized struct.
+    if unsafe { libc::ioctl(file.as_raw_fd(), VIDIOC_G_PARM as libc::c_ulong, &mut parm) } < 0 {
+        return Err("VIDIOC_G_PARM failed".to_string());
+    }
+
+    let (numerator, denominator) = (parm.data[1], parm.data[2]);
+    if numerator == 1 && denominator % numerator == 0 {
+        return Ok(()); // already a whole frame rate
+    }
+
+    let whole_fps = (denominator / numerator).max(1);
+
+    let mut out = V4l2Streamparm {
+        param_type: V4L2_BUF_TYPE_VIDEO_CAPTURE,
+        data: [0; 200],
+    };
+    out.data[1] = 1; // timeperframe numerator: 1
+    out.data[2] = whole_fps; // timeperframe denominator: whole fps
+
+    // SAFETY: a plain VIDIOC_S_PARM ioctl with a correctly sized struct.
+    if unsafe { libc::ioctl(file.as_raw_fd(), VIDIOC_S_PARM as libc::c_ulong, &mut out) } < 0 {
+        return Err("VIDIOC_S_PARM failed".to_string());
+    }
+
+    Ok(())
 }
 
 fn parse_camera_index(value: &str) -> CameraIndex {
@@ -97,37 +210,51 @@ fn parse_resolution(value: &str) -> Option<Resolution> {
 }
 
 #[tauri::command(async)]
-pub fn list_resolutions(camera_index: String) -> Result<Vec<String>, String> {
-    let index = parse_camera_index(&camera_index);
-    let requested = RequestedFormat::new::<RgbFormat>(
-        RequestedFormatType::AbsoluteHighestFrameRate,
-    );
+pub fn list_resolutions(camera_index: String) -> Result<Vec<ResolutionInfo>, String> {
+    // The camera is opened for the duration of the query: the lists of
+    // supported resolutions and frame rates can only be read from an open
+    // device.
+    let mut camera = open_camera(parse_camera_index(&camera_index), None)
+        .map_err(|err| err.to_string())?;
 
-    // The camera is opened for the duration of the query: the list of
-    // supported resolutions can only be read from an open device.
-    let mut camera = Camera::new(index, requested).map_err(|err| err.to_string())?;
-
-    let mut resolutions: Vec<Resolution> = Vec::new();
+    // Highest supported frame rate per resolution across every pixel format
+    // (the backend reports the frame rates next to each resolution).
+    let mut frame_rates: HashMap<Resolution, u32> = HashMap::new();
     let formats = camera.compatible_fourcc().unwrap_or_default();
     for format in formats {
-        if let Ok(map) = camera.compatible_list_by_resolution(format) {
-            resolutions.extend(map.into_keys());
+        if let Ok(list) = camera.compatible_list_by_resolution(format) {
+            for (resolution, rates) in list {
+                let best = rates.iter().copied().max().unwrap_or(0);
+                frame_rates
+                    .entry(resolution)
+                    .and_modify(|current| *current = (*current).max(best))
+                    .or_insert(best);
+            }
         }
     }
 
-    // From the largest resolution down; drop duplicates (the same resolution
-    // advertised in several formats).
-    resolutions.sort_unstable_by(|a, b| {
-        (b.width_x as u64 * b.height_y as u64)
-            .cmp(&(a.width_x as u64 * a.height_y as u64))
-            .then_with(|| b.width_x.cmp(&a.width_x))
-    });
-    resolutions.dedup();
-
-    Ok(resolutions
+    let mut infos: Vec<ResolutionInfo> = frame_rates
         .into_iter()
-        .map(|res| format!("{}x{}", res.width_x, res.height_y))
-        .collect())
+        .map(|(resolution, max_fps)| ResolutionInfo {
+            resolution: format!("{}x{}", resolution.width_x, resolution.height_y),
+            max_fps: (max_fps > 0).then_some(max_fps),
+        })
+        .collect();
+
+    // From the largest resolution down.
+    infos.sort_unstable_by(|a, b| {
+        let area = |value: &ResolutionInfo| -> u64 {
+            let (w, h) = value
+                .resolution
+                .split_once('x')
+                .map_or((0, 0), |(w, h)| (w.parse().unwrap_or(0), h.parse().unwrap_or(0)));
+            w as u64 * h as u64
+        };
+
+        area(b).cmp(&area(a)).then_with(|| b.resolution.cmp(&a.resolution))
+    });
+
+    Ok(infos)
 }
 
 #[tauri::command(async)]
@@ -146,21 +273,12 @@ pub fn start_rust_camera(
 
     let thread_handle = thread::spawn(move || {
         let index = parse_camera_index(&camera_index);
-        // If a resolution is selected, use it with the highest FPS; otherwise
-        // the camera picks the format with the maximum frame rate.
-        let requested = match resolution.as_deref().and_then(parse_resolution) {
-            Some(res) => {
-                RequestedFormat::new::<RgbFormat>(RequestedFormatType::HighestResolution(res))
-            }
-            None => RequestedFormat::new::<RgbFormat>(
-                RequestedFormatType::AbsoluteHighestFrameRate,
-            ),
-        };
 
-        let mut camera = match Camera::new(index, requested) {
+        let mut camera = match open_camera(index, resolution.as_deref().and_then(parse_resolution))
+        {
             Ok(camera) => camera,
             Err(err) => {
-                let _ = started_tx.send(Err(err.to_string()));
+                let _ = started_tx.send(Err(err));
                 return;
             }
         };
@@ -187,7 +305,11 @@ pub fn start_rust_camera(
 
                 let width = decoded.width();
                 let height = decoded.height();
-                let raw_bytes = decoded.into_raw();
+                // Some decoders (YUYV frames from v4l2loopback devices) emit
+                // buffers with trailing padding: the payload layout assumes
+                // exactly width*height*3 RGB bytes, so normalize the length.
+                let mut raw_bytes = decoded.into_raw();
+                raw_bytes.resize(width as usize * height as usize * 3, 0);
 
                 // Recognize the pose right in the capture thread: while the
                 // inference runs, new frames are simply not picked up, so the
