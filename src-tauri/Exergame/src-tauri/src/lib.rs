@@ -1,57 +1,37 @@
-use nokhwa::{
-    pixel_format::RgbFormat,
-    utils::{CameraIndex, RequestedFormat, RequestedFormatType},
-    Camera,
-};
-use tauri::ipc::{Channel, Response};
-use std::thread;
+mod camera;
+mod movenet;
 
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
-#[tauri::command]
-fn start_rust_camera(on_frame: Channel<Response>) {
-    thread::spawn(move || {
-        let index = CameraIndex::Index(0);
-        let requested = RequestedFormat::new::<RgbFormat>(
-            RequestedFormatType::AbsoluteHighestFrameRate
-        );
-
-        let mut camera = Camera::new(index, requested).expect("Не удалось открыть камеру");
-        camera.open_stream().expect("Не удалось запустить поток");
-
-        loop {
-            if let Ok(frame) = camera.frame() {
-                // Декодируем в RGB или отправляем сырые байты (например, MJPEG)
-                let decoded = frame.decode_image::<RgbFormat>().unwrap();
-                let resolution = decoded.resolution();
-                let raw_bytes = decoded.into_raw();
-
-                // Первые 8 байт — ширина и высота кадра (u32 big-endian), далее RGB-пиксели.
-                let mut payload = Vec::with_capacity(8 + raw_bytes.len());
-                payload.extend_from_slice(&resolution.width().to_be_bytes());
-                payload.extend_from_slice(&resolution.height().to_be_bytes());
-                payload.extend_from_slice(&raw_bytes);
-
-                // Отправка кадра во фронтенд через канал
-                if on_frame.send(Response::new(payload)).is_err() {
-                    break; // Фронтенд закрыл канал
-                }
-            }
-        }
-    });
-}
+use camera::CameraStreamState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // WebKitGTK's DMA-BUF renderer crashes GTK on some Wayland setups
+    // (Gdk protocol error 71, the window never opens). The container runs
+    // with this already set via docker-compose; set it for host runs too.
+    // Safe: called once at startup, before any threads spawn.
+    unsafe {
+        std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_log::Builder::default().build())
+        // Logs go to stdout and the webview console only: the default file
+        // target lives in ~/.local/share, which the container app (root) and
+        // the host app (regular user) would fight over.
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Webview),
+                ])
+                .build(),
+        )
+        .manage(CameraStreamState::default())
         .invoke_handler(tauri::generate_handler![
-            greet,
-            start_rust_camera
+            camera::list_cameras,
+            camera::list_resolutions,
+            camera::start_rust_camera,
+            camera::stop_rust_camera
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

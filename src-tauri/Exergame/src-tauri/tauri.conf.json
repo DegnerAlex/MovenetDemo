@@ -5,6 +5,7 @@
   "identifier": "org.ergofox.exergame",
   "build": {
     "devUrl": "http://localhost:9999",
+    "beforeBuildCommand": "pnpm build",
     "frontendDist": "../dist"
   },
   "app": {

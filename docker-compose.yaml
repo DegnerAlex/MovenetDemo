@@ -31,17 +31,26 @@ services:
       - WEBKIT_DISABLE_COMPOSITING_MODE=1
       - WEBKIT_DEBUG=1
       - CI=true
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     volumes:
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
       - ${XDG_RUNTIME_DIR:-/run/user/1000}/${WAYLAND_DISPLAY:-wayland-0}:${XDG_RUNTIME_DIR:-/run/user/1000}/${WAYLAND_DISPLAY:-wayland-0}:ro
       - /tmp/.X11-unix:/tmp/.X11-unix:ro
-      - ./:/srv/ratspeak-src/Ratspeak:cached
+      - ./src-tauri/Exergame:/srv:cached
       - ~/.local/share/:/root/.local/share/
     devices:
       - /dev/video0:/dev/video0
 
-    working_dir: /srv/ratspeak-src/Ratspeak/src-tauri
+    working_dir: /srv
     command: cargo tauri dev
     network_mode: host
     stdin_open: true

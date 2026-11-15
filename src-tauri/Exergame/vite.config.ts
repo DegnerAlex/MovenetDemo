@@ -16,12 +16,6 @@ export default defineConfig({
     clearScreen: false,
     build: {
         outDir: 'dist',
-        watch: {},
-        rolldownOptions: {
-            input: {
-                dashboard: resolve(__dirname, 'src/dashboard.jsx'),
-            },
-        }
     },
     // 2. tauri expects a fixed port, fail if that port is not available
     server: {
