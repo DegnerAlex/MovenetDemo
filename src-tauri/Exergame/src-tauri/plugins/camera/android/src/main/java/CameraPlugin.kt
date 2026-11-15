@@ -79,31 +79,48 @@ class ExergameCameraPlugin(private val activity: Activity) : Plugin(activity) {
                 activity.getSystemService(Activity.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
 
             val cameras = JSArray()
+            data class Entry(val id: String, val facing: Int, val base: String)
+
+            val entries = mutableListOf<Entry>()
             for (id in manager.cameraIdList) {
                 val characteristics = manager.getCameraCharacteristics(id)
                 val facing =
                     characteristics.get(android.hardware.camera2.CameraCharacteristics.LENS_FACING)
+                        ?: android.hardware.camera2.CameraMetadata.LENS_FACING_UNKNOWN
 
-                // The app acts like a webcam: the person stands in front of the
-                // phone, so prefer back-facing lenses. Fall back to everything
-                // when no back camera exists.
-                if (facing != null && facing != android.hardware.camera2.CameraMetadata.LENS_FACING_BACK) {
-                    continue
+                val base = when (facing) {
+                    android.hardware.camera2.CameraMetadata.LENS_FACING_BACK -> "Back camera"
+                    android.hardware.camera2.CameraMetadata.LENS_FACING_FRONT -> "Front camera"
+                    android.hardware.camera2.CameraMetadata.LENS_FACING_EXTERNAL -> "External camera"
+                    else -> "Camera"
                 }
 
-                val camera = JSObject()
-                camera.put("id", id)
-                camera.put("name", "Camera $id")
-                cameras.put(camera)
+                entries.add(Entry(id, facing, base))
             }
 
-            if (cameras.length() == 0) {
-                for (id in manager.cameraIdList) {
-                    val camera = JSObject()
-                    camera.put("id", id)
-                    camera.put("name", "Camera $id")
-                    cameras.put(camera)
-                }
+            // Front cameras first (selfie view), then back, then external and
+            // unknown lenses.
+            val priority = mapOf(
+                android.hardware.camera2.CameraMetadata.LENS_FACING_FRONT to 0,
+                android.hardware.camera2.CameraMetadata.LENS_FACING_BACK to 1,
+                android.hardware.camera2.CameraMetadata.LENS_FACING_EXTERNAL to 2,
+                android.hardware.camera2.CameraMetadata.LENS_FACING_UNKNOWN to 3
+            )
+            val sorted = entries.sortedBy { priority[it.facing] ?: 2 }
+
+            // Number cameras that share the same facing ("Back camera 2").
+            val totals = sorted.groupingBy { it.facing }.eachCount()
+            val counters = HashMap<Int, Int>()
+
+            for (entry in sorted) {
+                val seen = (counters[entry.facing] ?: 0) + 1
+                counters[entry.facing] = seen
+                val name = if ((totals[entry.facing] ?: 0) > 1) "${entry.base} $seen" else entry.base
+
+                val camera = JSObject()
+                camera.put("id", entry.id)
+                camera.put("name", name)
+                cameras.put(camera)
             }
 
             val response = JSObject()
