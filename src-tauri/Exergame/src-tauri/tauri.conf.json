@@ -31,7 +31,6 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "ort/libonnxruntime.so": "ort/libonnxruntime.so",
       "target/release/ort-gpu-bundle/*": "ort-gpu-bundle/"
     }
   }

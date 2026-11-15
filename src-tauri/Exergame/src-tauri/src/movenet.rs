@@ -90,6 +90,7 @@ impl tracing::field::Visit for MessageVisitor {
 /// handles: the libraries stay loaded for the whole process lifetime, which
 /// lets the CUDA provider's dependencies (and ORT's libcudnn.so dlopen)
 /// resolve by soname afterwards.
+#[cfg(not(target_os = "android"))]
 fn preload_libraries(dir: &std::path::Path, names: &[&str]) {
     for name in names {
         let path = dir.join(name);
@@ -207,7 +208,8 @@ fn ort_environment() -> Result<ort::environment::Environment, String> {
 
     // Libraries bundled into AppImage builds (Tauri resource directory).
     // Desktop only: those libraries are x86_64 builds. On Android the ONNX
-    // Runtime ships as a JNI library (arm64) instead.
+    // Runtime ships as a JNI library (arm64) instead, and the CPU build is
+    // embedded into the binary itself.
     #[cfg(not(target_os = "android"))]
     if let Some(resource_dir) = RESOURCE_DIR.get() {
         if nvidia_gpu || rocm_sdk {
