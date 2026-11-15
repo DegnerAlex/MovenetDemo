@@ -256,14 +256,19 @@ export class CameraPreview extends Component<CameraPreviewProps, CameraPreviewSt
                     aria-label="Camera preview"
                     style={{transform: mirror ? "scaleX(-1)" : undefined}}
                 />
-                <div className="mt-2 mx-3 mb-3 is-flex is-justify-content-space-between is-align-items-center" style={{gap: "0.5rem", flexShrink: 0}}>
-                    <div className="is-flex is-align-items-center" style={{gap: "0.5rem"}}>
+                <div className="mt-2 mx-3 mb-3 is-flex is-flex-wrap-wrap is-justify-content-space-between is-align-items-center" style={{gap: "0.5rem", flexShrink: 0}}>
+                    <div className="is-flex is-flex-wrap-wrap is-align-items-center" style={{gap: "0.5rem"}}>
                         {resolution && (
                             <Tag>{`${resolution.width}×${resolution.height}`}</Tag>
                         )}
                         {poseStats && (
                             <Tag color="info">
-                                {`Recognition: ${poseStats.inferenceMs.toFixed(0)} ms · max ${poseStats.maxFps.toFixed(1)} FPS`}
+                                {`Recognition: ${poseStats.inferenceMs.toFixed(0)} ms`}
+                            </Tag>
+                        )}
+                        {poseStats && (
+                            <Tag color="info">
+                                {`Max: ${poseStats.maxFps.toFixed(1)} FPS`}
                             </Tag>
                         )}
                         {poseStats?.provider && (
@@ -277,7 +282,7 @@ export class CameraPreview extends Component<CameraPreviewProps, CameraPreviewSt
                             <>
                                 <Button
                                     size="small"
-                                    color={mirror ? "primary" : undefined}
+                                    color={mirror ? "info" : undefined}
                                     aria-pressed={mirror}
                                     onClick={this.handleMirrorToggle}
                                 >
