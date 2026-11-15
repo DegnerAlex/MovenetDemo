@@ -1,6 +1,8 @@
 # Movenet FPS Tester
 
-<img width="930" height="763" alt="image" src="https://github.com/user-attachments/assets/eae8596f-2e2b-40dd-9bac-47be875c54b9" />
+<img height="300" alt="image" src="https://github.com/user-attachments/assets/eae8596f-2e2b-40dd-9bac-47be875c54b9" />
+<img height="300" alt="image" src="https://github.com/user-attachments/assets/27d008dd-fcac-4321-aff9-86e03a0aef9b" />
+
 
 
 A desktop and Android app that shows your camera feed and detects your body
