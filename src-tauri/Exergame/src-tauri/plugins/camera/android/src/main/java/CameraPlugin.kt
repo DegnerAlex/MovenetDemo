@@ -328,19 +328,6 @@ class ExergameCameraPlugin(private val activity: Activity) : Plugin(activity) {
         return arr
     }
 
-    private fun keypointsToJsArray(keypoints: List<NamedKeypoint>): JSArray {
-        val arr = JSArray()
-        for (keypoint in keypoints) {
-            val obj = JSObject()
-            obj.put("name", keypoint.name)
-            obj.put("x", keypoint.x)
-            obj.put("y", keypoint.y)
-            obj.put("score", keypoint.score)
-            arr.put(obj)
-        }
-        return arr
-    }
-
     @Command
     fun readFrame(invoke: Invoke) {
         val jpeg = latestJpeg
