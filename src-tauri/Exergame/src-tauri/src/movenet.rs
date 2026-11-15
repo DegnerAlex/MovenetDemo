@@ -260,6 +260,9 @@ fn ort_environment() -> Result<ort::environment::Environment, String> {
         }
     }
 
+    // On Android the EP registration block is compiled out, so the rebinding
+    // below never happens and the binding must not be `mut`.
+    #[cfg_attr(target_os = "android", allow(unused_mut))]
     let (mut environment, ort_dir) = if let Some(path) = chosen {
         let environment = ort::init_from(&path)
             .map_err(|err| format!("Failed to load {}: {err}", path.display()))?

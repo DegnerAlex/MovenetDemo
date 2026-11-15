@@ -54,7 +54,7 @@ export function CameraSettings(props: CameraSettingsProps) {
     } = props;
 
     return (
-        <Box>
+        <Box className="settings-card">
             <div className="is-flex is-justify-content-space-between is-align-items-center mb-5">
                 <Heading size={5} className="mb-0">Webcam</Heading>
                 <Button

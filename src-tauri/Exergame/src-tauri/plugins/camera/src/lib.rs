@@ -57,6 +57,22 @@ impl<R: Runtime> Camera<R> {
         serde_json::from_value(cameras).map_err(|err| err.to_string())
     }
 
+    /// Lists the resolutions supported by a camera, largest first.
+    #[cfg(mobile)]
+    pub fn list_resolutions(&self, camera_id: Option<String>) -> Result<Vec<String>, String> {
+        let response: serde_json::Value = self
+            .0
+            .run_mobile_plugin("listResolutions", serde_json::json!({ "cameraId": camera_id }))
+            .map_err(|err| err.to_string())?;
+
+        let resolutions = response
+            .get("resolutions")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+
+        serde_json::from_value(resolutions).map_err(|err| err.to_string())
+    }
+
     /// Starts the capture. `width`/`height` of 0 let the camera decide.
     #[cfg(mobile)]
     pub fn start_capture(

@@ -47,6 +47,14 @@ const POSE_EDGES: ReadonlyArray<readonly [number, number]> = [
     [12, 14], [14, 16],    // right leg
 ];
 
+// Leg keypoint indices (knees and ankles).
+const LEG_KEYPOINT_INDICES = [13, 14, 15, 16];
+
+// When the pelvis sits this close to the frame's bottom border (as a ratio of
+// the frame height), knee/ankle points landing above it are considered
+// hallucinations and the legs are hidden.
+const PELVIS_BOTTOM_MARGIN_RATIO = 0.85;
+
 // Bone line width at the reference resolution; scales like the dot radius.
 const SKELETON_LINE_WIDTH = 6;
 
@@ -259,6 +267,22 @@ export class CameraPreview extends Component<CameraPreviewProps, CameraPreviewSt
         const shoulderCenter = midpoint(pose.keypoints[5], pose.keypoints[6]);
         const hipCenter = midpoint(pose.keypoints[11], pose.keypoints[12]);
 
+        // MoveNet quirk: when the pelvis sits at the very bottom of the frame
+        // and the knee/ankle points land above it, the legs are hallucinated
+        // (e.g. the person is cut off by the frame). Hide them in that case.
+        let hideLegs = false;
+        if (hipCenter && hipCenter.y > height * PELVIS_BOTTOM_MARGIN_RATIO) {
+            const visibleLegPoints = LEG_KEYPOINT_INDICES
+                .map((index) => pose.keypoints[index])
+                .filter((point) => point && point.score >= MIN_KEYPOINT_SCORE);
+
+            hideLegs =
+                visibleLegPoints.length > 0
+                && visibleLegPoints.every((point) => point.y < hipCenter.y);
+        }
+
+        const isLegPoint = (index: number) => LEG_KEYPOINT_INDICES.includes(index);
+
         // Face: the eyes connect to their center, the center connects to the
         // nose.
         const eyeCenter = midpoint(pose.keypoints[1], pose.keypoints[2]);
@@ -281,6 +305,7 @@ export class CameraPreview extends Component<CameraPreviewProps, CameraPreviewSt
                 !a || !b
                 || a.score < MIN_KEYPOINT_SCORE
                 || b.score < MIN_KEYPOINT_SCORE
+                || (hideLegs && (isLegPoint(from) || isLegPoint(to)))
             ) {
                 continue;
             }
@@ -322,15 +347,19 @@ export class CameraPreview extends Component<CameraPreviewProps, CameraPreviewSt
 
         // Joints.
         context.fillStyle = "#ffffff";
-        for (const keypoint of pose.keypoints) {
+        pose.keypoints.forEach((keypoint, index) => {
             if (keypoint.score < MIN_KEYPOINT_SCORE) {
-                continue;
+                return;
+            }
+
+            if (hideLegs && isLegPoint(index)) {
+                return;
             }
 
             context.beginPath();
             context.arc(keypoint.x, keypoint.y, radius, 0, Math.PI * 2);
             context.fill();
-        }
+        });
 
         // Torso and face center points.
         for (const center of [shoulderCenter, hipCenter, eyeCenter]) {
@@ -358,7 +387,7 @@ export class CameraPreview extends Component<CameraPreviewProps, CameraPreviewSt
                     aria-label="Camera preview"
                     style={{transform: mirror ? "scaleX(-1)" : undefined}}
                 />
-                <div className="mt-2 mx-3 mb-3 is-flex is-flex-wrap-wrap is-justify-content-space-between is-align-items-center" style={{gap: "0.5rem", flexShrink: 0}}>
+                <div className={`mt-2 is-flex is-flex-wrap-wrap is-justify-content-space-between is-align-items-center${isStreaming ? " status-card" : ""}`} style={{gap: "0.5rem", flexShrink: 0, position: "relative", zIndex: 1}}>
                     <div className="is-flex is-flex-wrap-wrap is-align-items-center" style={{gap: "0.5rem"}}>
                         {resolution && (
                             <Tag>{`${resolution.width}×${resolution.height}`}</Tag>

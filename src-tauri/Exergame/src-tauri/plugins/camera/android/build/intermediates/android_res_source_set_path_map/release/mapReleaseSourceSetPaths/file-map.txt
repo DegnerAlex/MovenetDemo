@@ -1,0 +1,9 @@
+com.exergame.camera.tauri-plugin-exergame-camera-pngs-0 /srv/src-tauri/plugins/camera/android/build/generated/res/pngs/release
+com.exergame.camera.tauri-plugin-exergame-camera-updated_navigation_xml-1 /srv/src-tauri/plugins/camera/android/build/generated/updated_navigation_xml/release
+com.exergame.camera.tauri-plugin-exergame-camera-mergeReleaseResources-2 /srv/src-tauri/plugins/camera/android/build/intermediates/incremental/release/mergeReleaseResources/merged.dir
+com.exergame.camera.tauri-plugin-exergame-camera-mergeReleaseResources-3 /srv/src-tauri/plugins/camera/android/build/intermediates/incremental/release/mergeReleaseResources/stripped.dir
+com.exergame.camera.tauri-plugin-exergame-camera-release-4 /srv/src-tauri/plugins/camera/android/build/intermediates/merged_res/release/mergeReleaseResources
+com.exergame.camera.tauri-plugin-exergame-camera-release-5 /srv/src-tauri/plugins/camera/android/build/intermediates/packaged_res/release/packageReleaseResources
+com.exergame.camera.tauri-plugin-exergame-camera-main-6 /srv/src-tauri/plugins/camera/android/src/main/res
+com.exergame.camera.tauri-plugin-exergame-camera-release-7 /srv/src-tauri/plugins/camera/android/src/release/res
+gradleHome-0 /root/.gradle

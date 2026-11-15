@@ -7,12 +7,12 @@ mod camera_android;
 
 // The re-exports are consumed by `generate_handler!` below; the macro expands
 // to code the compiler does not count as a "use", hence the allow.
-#[cfg_attr(not(target_os = "android"), allow(unused_imports))]
 #[cfg(not(target_os = "android"))]
-use camera::{list_cameras, start_rust_camera, stop_rust_camera};
+#[allow(unused_imports)]
+use camera::{list_cameras, list_resolutions, start_rust_camera, stop_rust_camera};
 #[cfg(target_os = "android")]
 #[allow(unused_imports)]
-use camera_android::{list_cameras, start_rust_camera, stop_rust_camera};
+use camera_android::{list_cameras, list_resolutions, start_rust_camera, stop_rust_camera};
 
 #[cfg(not(target_os = "android"))]
 use camera::CameraStreamState;
@@ -69,10 +69,10 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            camera::list_cameras,
-            camera::list_resolutions,
-            camera::start_rust_camera,
-            camera::stop_rust_camera
+            list_cameras,
+            list_resolutions,
+            start_rust_camera,
+            stop_rust_camera
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

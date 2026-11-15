@@ -5,6 +5,7 @@
 //! from the Kotlin plugin (CameraX) as JPEG and are decoded here, then fed
 //! to MoveNet like the desktop frames are.
 
+use crate::movenet;
 use serde::Serialize;
 use std::{
     io::Cursor,
@@ -18,7 +19,7 @@ use tauri::{
     ipc::{Channel, Response},
     AppHandle, Manager, Runtime, State,
 };
-use tauri_plugin_exergame_camera::{Camera, Frame};
+use tauri_plugin_exergame_camera::Camera;
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -78,6 +79,30 @@ pub fn list_cameras<R: Runtime>(app: AppHandle<R>) -> Result<Vec<CameraDescripto
             name: camera.name,
         })
         .collect())
+}
+
+#[tauri::command(async)]
+pub fn list_resolutions<R: Runtime>(
+    camera_index: String,
+    app: AppHandle<R>,
+) -> Result<Vec<String>, String> {
+    let camera = app.state::<Camera<R>>();
+    let mut resolutions = camera.list_resolutions(Some(camera_index))?;
+
+    // Largest first; drop duplicates (the same size in several layouts).
+    resolutions.sort_unstable_by(|a, b| {
+        let area = |value: &String| -> u64 {
+            let (w, h) = value
+                .split_once('x')
+                .map_or((0, 0), |(w, h)| (w.parse().unwrap_or(0), h.parse().unwrap_or(0)));
+            w as u64 * h as u64
+        };
+
+        area(b).cmp(&area(a)).then_with(|| b.cmp(a))
+    });
+    resolutions.dedup();
+
+    Ok(resolutions)
 }
 
 #[tauri::command(async)]

@@ -1,0 +1,1 @@
+/srv/src-tauri/plugins/camera/android/src/main/java/CameraPlugin.kt

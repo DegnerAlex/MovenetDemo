@@ -1,3 +1,29 @@
+/* Material-inspired light theme on top of Bulma.
+   The app looks like an Android app in light mode: white cards, pill buttons,
+   chips and the M3 purple accent. */
+
+:root {
+  --md-primary: #6750a4;
+  --md-on-primary: #ffffff;
+  --md-primary-container: #eaddff;
+  --md-on-primary-container: #21005d;
+  --md-error: #b3261e;
+  --md-on-error: #ffffff;
+  --md-error-container: #f9dedc;
+  --md-on-error-container: #410e0b;
+  --md-surface: #ffffff;
+  --md-surface-variant: #f3edf7;
+  --md-background: #fef7ff;
+  --md-outline: #79747e;
+  --md-outline-variant: #cac4d0;
+  --md-on-surface: #1d1b20;
+  --md-on-surface-muted: #49454f;
+  --md-success-container: #c9efdb;
+  --md-on-success-container: #0f4d2a;
+  --md-warning-container: #fbe9c6;
+  --md-on-warning-container: #5c4300;
+}
+
 html,
 body,
 #root {
@@ -6,6 +32,9 @@ body,
 
 body {
   overflow: hidden;
+  background: var(--md-background);
+  color: var(--md-on-surface);
+  font-family: Roboto, "Segoe UI", system-ui, sans-serif;
 }
 
 .app-root {
@@ -29,4 +58,108 @@ body {
   width: 100%;
   object-fit: contain;
   background: #000;
+  /* The video extends behind the status row and the settings card. */
+  margin-bottom: -60px;
+}
+
+.settings-card {
+  position: relative;
+  z-index: 1;
+  margin-top: 8px;
+}
+
+/* Cards: white Material cards with a soft elevation. */
+.box {
+  background: var(--md-surface);
+  border: 1px solid var(--md-outline-variant);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Status row during streaming: a card overlapping the video with rounded
+   top corners (bottom stays flush with the screen edge). */
+.status-card {
+  background: var(--md-surface);
+  border-radius: 16px 16px 0 0;
+  padding: 8px 12px;
+  box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* Buttons: Material pill shape. Default = outlined, variants = filled. */
+.button {
+  background: transparent;
+  border: 1px solid var(--md-outline);
+  border-radius: 9999px;
+  box-shadow: none;
+  color: var(--md-on-surface-muted);
+  font-weight: 500;
+}
+
+.button:hover {
+  background: rgba(103, 80, 164, 0.08);
+  border-color: var(--md-primary);
+  color: var(--md-primary);
+}
+
+.button:focus:not(:active),
+.button.is-focused:not(:active) {
+  box-shadow: none;
+}
+
+.button.is-primary,
+.button.is-info {
+  background: var(--md-primary);
+  border: none;
+  color: var(--md-on-primary);
+}
+
+.button.is-danger {
+  background: var(--md-error);
+  border: none;
+  color: var(--md-on-error);
+}
+
+.button[disabled] {
+  opacity: 0.38;
+}
+
+/* Tags: Material chips (pill-shaped, outlined). */
+.tag {
+  background: var(--md-surface);
+  border: 1px solid var(--md-outline-variant);
+  border-radius: 9999px;
+  color: var(--md-on-surface-muted);
+  font-weight: 500;
+}
+
+.tag.is-info {
+  background: var(--md-surface-variant);
+  border-color: var(--md-outline-variant);
+  color: var(--md-on-surface);
+}
+
+.tag.is-success {
+  background: var(--md-success-container);
+  border-color: transparent;
+  color: var(--md-on-success-container);
+}
+
+.tag.is-warning {
+  background: var(--md-warning-container);
+  border-color: transparent;
+  color: var(--md-on-warning-container);
+}
+
+/* Headings and text on the light surfaces. */
+.title,
+.subtitle,
+.content {
+  color: var(--md-on-surface);
+}
+
+/* Notifications: Material error banners. */
+.notification {
+  background: var(--md-error-container);
+  border-radius: 12px;
+  color: var(--md-on-error-container);
 }

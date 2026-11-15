@@ -7,6 +7,25 @@ fn main() {
         .android_path("android")
         .build();
 
+    let target = std::env::var("TARGET").unwrap_or_default();
+    if !target.contains("android") {
+        return;
+    }
+
+    // Only touch the generated project when `tauri android init` already ran.
+    if !Path::new("../../gen/android").exists() {
+        return;
+    }
+
+    // Declare the CAMERA permission in the app manifest; the runtime request
+    // happens in the Kotlin plugin (startCapture → permission callback).
+    tauri_plugin::mobile::update_android_manifest(
+        "EXERGAME CAMERA PLUGIN",
+        "manifest",
+        r#"<uses-permission android:name="android.permission.CAMERA" />"#.to_string(),
+    )
+    .expect("failed to update the Android manifest");
+
     copy_ort_android_libs();
 }
 
@@ -14,12 +33,7 @@ fn main() {
 // that dlopen("libonnxruntime.so") resolves at runtime (the app itself is
 // built with `load-dynamic`).
 fn copy_ort_android_libs() {
-    let Ok(target) = std::env::var("TARGET") else {
-        return;
-    };
-    if !target.contains("android") {
-        return;
-    }
+    let target = std::env::var("TARGET").unwrap_or_default();
 
     let abi = if target.starts_with("aarch64") {
         "arm64-v8a"
@@ -34,11 +48,6 @@ fn copy_ort_android_libs() {
         println!(
             "cargo:warning=ort-android/{abi}/libonnxruntime.so is missing: the Android app will fail to load ONNX Runtime"
         );
-        return;
-    }
-
-    // Only touch the generated project when `tauri android init` already ran.
-    if !Path::new("../../gen/android").exists() {
         return;
     }
 

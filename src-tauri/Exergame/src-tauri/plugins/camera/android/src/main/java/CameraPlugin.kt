@@ -42,6 +42,11 @@ class StartCaptureArgs {
     var height: Int = 0
 }
 
+@InvokeArg
+class ListResolutionsArgs {
+    var cameraId: String? = null
+}
+
 @TauriPlugin(
     permissions = [
         Permission(strings = [PERMISSION_NAME], alias = PERMISSION_ALIAS_CAMERA)
@@ -95,6 +100,37 @@ class ExergameCameraPlugin(private val activity: Activity) : Plugin(activity) {
 
             val response = JSObject()
             response.put("cameras", cameras)
+            invoke.resolve(response)
+        } catch (e: Exception) {
+            invoke.reject(e.message ?: e.toString())
+        }
+    }
+
+    @Command
+    fun listResolutions(invoke: Invoke) {
+        try {
+            val args = invoke.parseArgs(ListResolutionsArgs::class.java)
+            val cameraId = args.cameraId
+                ?: throw Exception("cameraId is required")
+
+            val manager =
+                activity.getSystemService(Activity.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
+            val characteristics = manager.getCameraCharacteristics(cameraId)
+            val map = characteristics.get(android.hardware.camera2.CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+
+            val resolutions = JSArray()
+            if (map != null) {
+                val seen = HashSet<String>()
+                for (size in map.getOutputSizes(android.graphics.ImageFormat.YUV_420_888)) {
+                    val label = "${size.width}x${size.height}"
+                    if (seen.add(label)) {
+                        resolutions.put(label)
+                    }
+                }
+            }
+
+            val response = JSObject()
+            response.put("resolutions", resolutions)
             invoke.resolve(response)
         } catch (e: Exception) {
             invoke.reject(e.message ?: e.toString())
