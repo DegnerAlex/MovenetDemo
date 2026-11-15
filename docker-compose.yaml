@@ -50,6 +50,9 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix:ro
       - ./src-tauri/Exergame:/srv:cached
       - ~/.local/share/:/root/.local/share/
+      # Persistent cargo registry: gen/android references crates by absolute
+      # registry paths, which must survive across `docker compose run` sessions.
+      - cargo-registry:/root/.cargo/registry
     devices:
       - /dev/video0:/dev/video0
       - /dev/fuse:/dev/fuse
@@ -61,3 +64,7 @@ services:
     tty: true
     depends_on:
       - frontend
+
+# Persisted cargo registry shared by exergame containers
+volumes:
+  cargo-registry:

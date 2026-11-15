@@ -379,6 +379,17 @@ export class CameraPreview extends Component<CameraPreviewProps, CameraPreviewSt
         const {resolution, poseStats, mirror} = this.state;
         const {isStreaming, isStoppingCamera, onStop} = this.props;
 
+        // FPS badge color: <30 error, 30..60 warning, 60..90 success, >90 info.
+        const fpsColor = poseStats
+            ? poseStats.maxFps > 90
+                ? "info"
+                : poseStats.maxFps >= 60
+                    ? "success"
+                    : poseStats.maxFps >= 30
+                        ? "warning"
+                        : "danger"
+            : undefined;
+
         return (
             <div className="camera-preview">
                 <canvas
@@ -393,12 +404,12 @@ export class CameraPreview extends Component<CameraPreviewProps, CameraPreviewSt
                             <Tag>{`${resolution.width}×${resolution.height}`}</Tag>
                         )}
                         {poseStats && (
-                            <Tag color="info">
+                            <Tag>
                                 {`Recognition: ${poseStats.inferenceMs.toFixed(0)} ms`}
                             </Tag>
                         )}
                         {poseStats && (
-                            <Tag color="info">
+                            <Tag color={fpsColor}>
                                 {`Max: ${poseStats.maxFps.toFixed(1)} FPS`}
                             </Tag>
                         )}

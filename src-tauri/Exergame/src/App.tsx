@@ -177,7 +177,7 @@ class App extends Component<AppProps, AppState> {
         const {cameras, selectedCamera, resolutions, selectedResolution, isLoadingCameras, isLoadingResolutions, isStartingCamera, isStoppingCamera, isStreaming, cameraError} = this.state;
 
         return (
-            <div className="app-root">
+            <div className={`app-root${isStreaming ? " app-root-streaming" : ""}`}>
                 <CameraPreview
                     ref={this.previewRef}
                     isStreaming={isStreaming}

@@ -22,6 +22,8 @@
   --md-on-success-container: #0f4d2a;
   --md-warning-container: #fbe9c6;
   --md-on-warning-container: #5c4300;
+  --md-info-container: #d7e3fb;
+  --md-on-info-container: #0d47a1;
 }
 
 html,
@@ -41,14 +43,48 @@ body {
   display: flex;
   flex-direction: column;
   height: 100%;
+  /* Scroll appears only when the content does not fit (e.g. mobile). */
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(121, 116, 126, 0.45) transparent;
+}
+
+/* During streaming the layout fits by design (the preview is flex-sized and
+   the canvas extends slightly behind the status row on purpose), so the
+   phantom scrollbar from that intentional overflow is suppressed. */
+.app-root-streaming {
   overflow: hidden;
+}
+
+/* Overlay-style scrollbar: thin and translucent, appears only when the
+   content actually overflows (with `overflow-y: auto` it is absent when
+   everything fits). */
+.app-root::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  background: transparent;
+}
+
+.app-root::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app-root::-webkit-scrollbar-thumb {
+  background: rgba(121, 116, 126, 0.45);
+  border-radius: 4px;
+}
+
+.app-root::-webkit-scrollbar-thumb:hover {
+  background: rgba(121, 116, 126, 0.7);
 }
 
 .camera-preview {
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-height: 0;
+  /* Keep a usable preview on small screens; the app scrolls if needed. */
+  min-height: 280px;
 }
 
 .camera {
@@ -133,9 +169,9 @@ body {
 }
 
 .tag.is-info {
-  background: var(--md-surface-variant);
-  border-color: var(--md-outline-variant);
-  color: var(--md-on-surface);
+  background: var(--md-info-container);
+  border-color: transparent;
+  color: var(--md-on-info-container);
 }
 
 .tag.is-success {
@@ -150,11 +186,40 @@ body {
   color: var(--md-on-warning-container);
 }
 
+.tag.is-danger {
+  background: var(--md-error-container);
+  border-color: transparent;
+  color: var(--md-on-error-container);
+}
+
 /* Headings and text on the light surfaces. */
 .title,
 .subtitle,
 .content {
   color: var(--md-on-surface);
+}
+
+/* Settings panel: tighter density so everything fits on phone screens. */
+.camera-settings .title.is-5 {
+  font-size: 1rem;
+}
+
+.camera-settings .button {
+  padding-left: 0.8em;
+  padding-right: 0.8em;
+}
+
+@media (max-width: 560px) {
+  .box {
+    padding: 0.9rem;
+  }
+
+  .camera-settings .button {
+    font-size: 0.8rem;
+    height: auto;
+    padding-top: 0.4em;
+    padding-bottom: 0.4em;
+  }
 }
 
 /* Notifications: Material error banners. */

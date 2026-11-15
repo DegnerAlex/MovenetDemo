@@ -54,8 +54,8 @@ export function CameraSettings(props: CameraSettingsProps) {
     } = props;
 
     return (
-        <Box className="settings-card">
-            <div className="is-flex is-justify-content-space-between is-align-items-center mb-5">
+        <Box className="settings-card camera-settings">
+            <div className="is-flex is-justify-content-space-between is-align-items-center mb-3">
                 <Heading size={5} className="mb-0">Webcam</Heading>
                 <Button
                     size="small"
@@ -95,18 +95,18 @@ export function CameraSettings(props: CameraSettingsProps) {
             )}
 
             {isLoadingResolutions ? (
-                <div className="is-flex is-align-items-center mt-3" style={{gap: "0.75rem"}}>
+                <div className="is-flex is-align-items-center mt-2" style={{gap: "0.75rem"}}>
                     <Loader/>
                     <span>Loading resolutions…</span>
                 </div>
             ) : resolutions.length === 0 ? (
-                <div className="mt-3">
+                <div className="mt-2">
                     <Tag>Auto (camera decides)</Tag>
                 </div>
             ) : (
                 <Button.Group
                     aria-label="Resolution selection"
-                    className="is-flex-wrap-wrap mt-3"
+                    className="is-flex-wrap-wrap mt-2"
                 >
                     {resolutions.map((value) => {
                         const isSelected = value === selectedResolution;
@@ -133,7 +133,7 @@ export function CameraSettings(props: CameraSettingsProps) {
                 </Notification>
             )}
 
-            <div className="is-flex is-align-items-center mt-5"
+            <div className="is-flex is-align-items-center mt-3"
                  style={{gap: "0.75rem", justifyContent: isStreaming ? "flex-end" : "center"}}>
                 {isStreaming ? (
                     <>
