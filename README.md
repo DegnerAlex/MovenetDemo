@@ -1,5 +1,8 @@
 # Movenet FPS Tester
 
+<img width="930" height="763" alt="image" src="https://github.com/user-attachments/assets/eae8596f-2e2b-40dd-9bac-47be875c54b9" />
+
+
 A desktop and Android app that shows your camera feed and detects your body
 pose in real time: 17 skeleton points (head, shoulders, elbows, hips, knees…)
 are drawn over the video, with live stats on how fast the detection runs.
