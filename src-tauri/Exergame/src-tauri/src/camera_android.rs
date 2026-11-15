@@ -2,10 +2,10 @@
 //!
 //! Mirrors `camera.rs`: same command names, same frame payload format
 //! (12-byte big-endian header + RGB pixels + JSON pose tail). Frames come
-//! from the Kotlin plugin (CameraX) as JPEG and are decoded here, then fed
-//! to MoveNet like the desktop frames are.
+//! from the Kotlin plugin (CameraX) as JPEG and are decoded here; the pose
+//! was already recognized on the Kotlin side (LiteRT + GPU delegate) and
+//! arrives with the frame, so this module only transports it.
 
-use crate::movenet;
 use serde::Serialize;
 use std::{
     io::Cursor,
@@ -152,29 +152,18 @@ pub fn start_rust_camera<R: Runtime>(
                         continue;
                     };
 
-                    // Recognize the pose right in the capture thread: while
-                    // the inference runs, new frames are simply not picked up,
-                    // so the stream FPS equals the recognition FPS.
-                    let pose_json = match movenet::recognize_frame(
-                        frame_width,
-                        frame_height,
-                        &rgb,
-                    ) {
-                        Ok(pose) => serde_json::to_vec(&pose).unwrap_or_default(),
-                        Err(err) => {
-                            eprintln!("recognize_frame: {err}");
-                            serde_json::to_vec(&movenet::PoseEstimate {
-                                width: frame_width,
-                                height: frame_height,
-                                keypoints: Vec::new(),
-                                inference_ms: 0.0,
-                                preprocess_ms: 0.0,
-                                max_fps: 0.0,
-                                provider: "",
-                            })
-                            .unwrap_or_default()
-                        }
-                    };
+                    // The pose was recognized on the Kotlin side (LiteRT +
+                    // GPU delegate); only the transport happens here.
+                    let pose_json = serde_json::to_vec(&serde_json::json!({
+                        "width": frame.width,
+                        "height": frame.height,
+                        "keypoints": frame.keypoints,
+                        "inferenceMs": frame.inference_ms,
+                        "preprocessMs": frame.preprocess_ms,
+                        "maxFps": 1000.0 / frame.inference_ms.max(0.001),
+                        "provider": frame.provider,
+                    }))
+                    .unwrap_or_default();
 
                     // First 12 bytes: width, height and JSON tail length (u32
                     // big-endian), then RGB pixels, then JSON with the pose.

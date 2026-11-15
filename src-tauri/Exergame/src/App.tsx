@@ -42,6 +42,13 @@ class App extends Component<AppProps, AppState> {
 
     componentDidMount() {
         void this.loadCameras();
+
+        // Headless self-test hook (EXERGAME_SELFTEST_STREAM=1): expose the
+        // real start flow so the packaged binary can be benchmarked with the
+        // full UI running.
+        (window as unknown as Record<string, unknown>).__exergameSelftest = () => {
+            void this.startStreaming();
+        };
     }
 
     componentWillUnmount() {

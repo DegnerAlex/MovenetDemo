@@ -48,13 +48,18 @@ body {
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(121, 116, 126, 0.45) transparent;
+  /* Keep the bottom controls clear of the Android system navigation panel. */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* During streaming the layout fits by design (the preview is flex-sized and
    the canvas extends slightly behind the status row on purpose), so the
-   phantom scrollbar from that intentional overflow is suppressed. */
+   phantom scrollbar from that intentional overflow is suppressed. The status
+   card itself reaches the screen edge; its content is padded by the safe-area
+   inset instead. */
 .app-root-streaming {
   overflow: hidden;
+  padding-bottom: 0;
 }
 
 /* Overlay-style scrollbar: thin and translucent, appears only when the
@@ -87,33 +92,36 @@ body {
   min-height: 280px;
 }
 
-/* Stack of the video canvas and the skeleton overlay: identical geometry so
-   the drawings align pixel-perfectly. */
+/* Stack of the video canvas and the skeleton overlay. Both canvases get the
+   identical box (including the 60px bleed behind the status row) and the
+   identical object-fit: any geometry difference between them makes the
+   skeleton drift vertically relative to the video image. */
 .camera-canvas-stack {
   position: relative;
-  display: flex;
   flex: 1;
   min-height: 0;
 }
 
+.camera,
 .pose-skeleton {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  /* Canvas is a replaced element: left/right alone do not stretch it, the
+     size must be explicit. Both canvases share the identical box (including
+     the 60px bleed behind the status row) so their bitmaps scale and
+     position identically. */
   width: 100%;
-  height: 100%;
+  height: calc(100% + 60px);
   object-fit: contain;
-  pointer-events: none;
 }
 
 .camera {
-  display: block;
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  object-fit: contain;
   background: #000;
-  /* The video extends behind the status row and the settings card. */
-  margin-bottom: -60px;
+}
+
+.pose-skeleton {
+  pointer-events: none;
 }
 
 .settings-card {
@@ -131,11 +139,13 @@ body {
 }
 
 /* Status row during streaming: a card overlapping the video with rounded
-   top corners (bottom stays flush with the screen edge). */
+   top corners. The bottom extends to the screen edge behind the Android
+   system navigation panel; the safe-area inset pads its content. */
 .status-card {
   background: var(--md-surface);
   border-radius: 16px 16px 0 0;
   padding: 8px 12px;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
   box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.08);
 }
 

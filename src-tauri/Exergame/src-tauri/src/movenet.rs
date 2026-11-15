@@ -106,6 +106,8 @@ fn preload_libraries(dir: &std::path::Path, names: &[&str]) {
                 libloading::os::unix::RTLD_NOW | libloading::os::unix::RTLD_GLOBAL,
             ) {
                 std::mem::forget(lib);
+            } else if std::env::var("EXERGAME_SELFTEST").is_ok_and(|value| !value.is_empty()) {
+                eprintln!("selftest: preload failed: {}", path.display());
             }
         }
     }
@@ -223,6 +225,32 @@ fn ort_environment() -> Result<ort::environment::Environment, String> {
 
     let mut chosen = candidates.iter().find(|path| path.exists()).cloned();
 
+    // Self-test diagnostics (EXERGAME_SELFTEST=1): show which ONNX Runtime
+    // library was chosen and what sits next to it.
+    #[cfg(not(target_os = "android"))]
+    if std::env::var("EXERGAME_SELFTEST").is_ok_and(|value| !value.is_empty()) {
+        match &chosen {
+            Some(path) => {
+                eprintln!("selftest: ORT dylib: {}", path.display());
+                if let Some(dir) = path.parent() {
+                    for name in [
+                        "libonnxruntime_providers_cuda.so",
+                        "libonnxruntime_providers_shared.so",
+                        "libcudart.so.13",
+                        "libcudnn.so",
+                    ] {
+                        eprintln!(
+                            "selftest:   {} {}",
+                            if dir.join(name).exists() { "yes" } else { "no " },
+                            name
+                        );
+                    }
+                }
+            }
+            None => eprintln!("selftest: ORT dylib: <none, will use embedded/system>"),
+        }
+    }
+
     #[cfg(target_os = "android")]
     if chosen.is_none() {
         // Android: the ONNX Runtime build ships as a JNI library inside the
@@ -249,6 +277,39 @@ fn ort_environment() -> Result<ort::environment::Environment, String> {
     #[cfg(not(target_os = "android"))]
     if let Some(dir) = chosen.as_ref().and_then(|path| path.parent()) {
         if dir.join("libcudart.so.13").exists() {
+            // The host driver userland must win over any bundled copy: the
+            // AppImage bundler picks up the CUDA runtime from the build
+            // image, which drags the build image's libcuda.so.1 along. That
+            // library comes from a different driver build and, mixed with
+            // the host driver's own sub-libraries, misbehaves: the GPU sinks
+            // into power-save clocks between frames, which triples the
+            // inference time. Loading the host driver first pins the
+            // libcuda.so.1 soname to the host build, so later lookups never
+            // reach the bundled copy.
+            for libcuda in [
+                "/usr/lib/libcuda.so.1",
+                "/usr/lib/x86_64-linux-gnu/libcuda.so.1",
+                "/usr/lib64/libcuda.so.1",
+            ] {
+                let host_driver = std::path::Path::new(libcuda);
+                if !host_driver.exists() {
+                    continue;
+                }
+
+                // Safety: dlopen of the host driver library in a
+                // single-threaded context (session initialization); the
+                // handle is intentionally leaked, see preload_libraries.
+                unsafe {
+                    if let Ok(lib) = libloading::os::unix::Library::open(
+                        Some(host_driver),
+                        libloading::os::unix::RTLD_NOW | libloading::os::unix::RTLD_GLOBAL,
+                    ) {
+                        std::mem::forget(lib);
+                    }
+                }
+                break;
+            }
+
             preload_libraries(
                 dir,
                 &[

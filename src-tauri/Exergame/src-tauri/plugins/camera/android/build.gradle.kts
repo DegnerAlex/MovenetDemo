@@ -9,6 +9,12 @@ android {
     namespace = "com.exergame.camera"
     compileSdk = 36
 
+    // Keep the .tflite model uncompressed so it can be memory-mapped from
+    // assets.
+    androidResources {
+        noCompress.add("tflite")
+    }
+
     defaultConfig {
         minSdk = 24
     }
@@ -33,8 +39,11 @@ dependencies {
     implementation("androidx.camera:camera-camera2:${camerax_version}")
     implementation("androidx.camera:camera-lifecycle:${camerax_version}")
     implementation("androidx.camera:camera-view:${camerax_version}")
-    // ONNX Runtime for Android: packages libonnxruntime.so for every ABI into
-    // the APK; the Rust side loads it via dlopen by bare name.
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.1")
+    // LiteRT (TensorFlow Lite): MoveNet inference with the GPU delegate,
+    // which works on any mobile GPU (Mali, Adreno, Immortalis) via OpenCL.
+    // The gpu-api artifact carries GpuDelegateFactory used by the delegate.
+    implementation("org.tensorflow:tensorflow-lite:2.16.1")
+    implementation("org.tensorflow:tensorflow-lite-gpu:2.16.1")
+    implementation("org.tensorflow:tensorflow-lite-gpu-api:2.16.1")
     implementation(project(":tauri-android"))
 }

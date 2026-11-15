@@ -23,12 +23,21 @@ pub struct CameraDescriptor {
     pub name: String,
 }
 
-/// A single captured frame: JPEG-encoded, ready for decoding on the Rust side.
-#[derive(Debug, Clone)]
+/// A single captured frame: JPEG for the video preview plus the MoveNet
+/// keypoints (LiteRT, decoded on the Kotlin side).
+#[derive(Debug, Clone, Deserialize)]
 pub struct Frame {
     pub width: u32,
     pub height: u32,
     pub jpeg: Vec<u8>,
+    #[serde(default)]
+    pub keypoints: serde_json::Value,
+    #[serde(default)]
+    pub inference_ms: f64,
+    #[serde(default)]
+    pub preprocess_ms: f64,
+    #[serde(default)]
+    pub provider: String,
 }
 
 /// Handle to the camera plugin.
@@ -125,6 +134,23 @@ impl<R: Runtime> Camera<R> {
                 .and_then(|value| value.as_u64())
                 .unwrap_or(0) as u32,
             jpeg,
+            keypoints: response
+                .get("keypoints")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null),
+            inference_ms: response
+                .get("inferenceMs")
+                .and_then(|value| value.as_f64())
+                .unwrap_or(0.0),
+            preprocess_ms: response
+                .get("preprocessMs")
+                .and_then(|value| value.as_f64())
+                .unwrap_or(0.0),
+            provider: response
+                .get("provider")
+                .and_then(|value| value.as_str())
+                .unwrap_or_default()
+                .to_string(),
         }))
     }
 

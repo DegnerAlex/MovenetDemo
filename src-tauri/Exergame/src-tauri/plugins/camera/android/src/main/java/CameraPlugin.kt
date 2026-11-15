@@ -3,6 +3,7 @@ package com.exergame.camera
 import android.Manifest
 import android.app.Activity
 import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.os.Build
 import android.util.Base64
 import android.util.Size
@@ -30,11 +31,16 @@ import com.google.common.util.concurrent.ListenableFuture
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlin.math.roundToInt
 
 private const val PERMISSION_ALIAS_CAMERA = "camera"
 private const val PERMISSION_NAME = Manifest.permission.CAMERA
 
 private const val JPEG_QUALITY = 80
+
+// MoveNet needs only a 192×192 input: cap the analysis bitmap so the
+// detection preprocessing stays cheap at any camera resolution.
+private const val ANALYSIS_MAX_WIDTH = 640
 
 @InvokeArg
 class StartCaptureArgs {
@@ -48,29 +54,31 @@ class ListResolutionsArgs {
     var cameraId: String? = null
 }
 
+private data class CameraEntry(val id: String, val facing: Int, val base: String)
+
 @TauriPlugin(
     permissions = [
         Permission(strings = [PERMISSION_NAME], alias = PERMISSION_ALIAS_CAMERA)
     ]
 )
 class ExergameCameraPlugin(private val activity: Activity) : Plugin(activity) {
-    companion object {
-        init {
-            // Load ONNX Runtime once, before the Rust side dlopens it by name.
-            System.loadLibrary("onnxruntime")
-        }
-    }
-
     private var cameraProviderFuture: ListenableFuture<ProcessCameraProvider>? = null
     private var cameraProvider: ProcessCameraProvider? = null
     private var analysisUseCase: ImageAnalysis? = null
     private val analysisExecutor: ExecutorService = Executors.newSingleThreadExecutor()
 
-    // The latest frame, continuously overwritten by the analyzer: the Rust
-    // side polls it at its own pace and always gets the freshest picture.
+    // Body-pose detection (MoveNet via LiteRT, GPU delegate when available).
+    private val detector = MovenetDetector(activity)
+
+    // The latest frame and pose, continuously overwritten by the analyzer: the
+    // Rust side polls at its own pace and always gets the freshest data.
     private var latestJpeg: ByteArray? = null
     private var latestWidth = 0
     private var latestHeight = 0
+    private var latestKeypoints: JSArray? = null
+    private var latestInferenceMs = 0.0
+    private var latestPreprocessMs = 0.0
+    private var providerKind = "CPU"
 
     @Command
     fun listCameras(invoke: Invoke) {
@@ -78,24 +86,21 @@ class ExergameCameraPlugin(private val activity: Activity) : Plugin(activity) {
             val manager =
                 activity.getSystemService(Activity.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
 
-            val cameras = JSArray()
-            data class Entry(val id: String, val facing: Int, val base: String)
-
-            val entries = mutableListOf<Entry>()
+            val entries = mutableListOf<CameraEntry>()
             for (id in manager.cameraIdList) {
                 val characteristics = manager.getCameraCharacteristics(id)
                 val facing =
                     characteristics.get(android.hardware.camera2.CameraCharacteristics.LENS_FACING)
-                        ?: android.hardware.camera2.CameraMetadata.LENS_FACING_UNKNOWN
+                        ?: -1
 
                 val base = when (facing) {
-                    android.hardware.camera2.CameraMetadata.LENS_FACING_BACK -> "Back camera"
                     android.hardware.camera2.CameraMetadata.LENS_FACING_FRONT -> "Front camera"
+                    android.hardware.camera2.CameraMetadata.LENS_FACING_BACK -> "Back camera"
                     android.hardware.camera2.CameraMetadata.LENS_FACING_EXTERNAL -> "External camera"
                     else -> "Camera"
                 }
 
-                entries.add(Entry(id, facing, base))
+                entries.add(CameraEntry(id, facing, base))
             }
 
             // Front cameras first (selfie view), then back, then external and
@@ -103,15 +108,15 @@ class ExergameCameraPlugin(private val activity: Activity) : Plugin(activity) {
             val priority = mapOf(
                 android.hardware.camera2.CameraMetadata.LENS_FACING_FRONT to 0,
                 android.hardware.camera2.CameraMetadata.LENS_FACING_BACK to 1,
-                android.hardware.camera2.CameraMetadata.LENS_FACING_EXTERNAL to 2,
-                android.hardware.camera2.CameraMetadata.LENS_FACING_UNKNOWN to 3
+                android.hardware.camera2.CameraMetadata.LENS_FACING_EXTERNAL to 2
             )
-            val sorted = entries.sortedBy { priority[it.facing] ?: 2 }
+            val sorted = entries.sortedBy { priority[it.facing] ?: 3 }
 
             // Number cameras that share the same facing ("Back camera 2").
             val totals = sorted.groupingBy { it.facing }.eachCount()
             val counters = HashMap<Int, Int>()
 
+            val cameras = JSArray()
             for (entry in sorted) {
                 val seen = (counters[entry.facing] ?: 0) + 1
                 counters[entry.facing] = seen
@@ -190,6 +195,10 @@ class ExergameCameraPlugin(private val activity: Activity) : Plugin(activity) {
 
     private fun startWithPermission(args: StartCaptureArgs, invoke: Invoke) {
         try {
+            // Prepare the LiteRT interpreter before the camera starts, so the
+            // first analyzed frame already has keypoints.
+            detector.ensureLoaded()
+
             val future = ProcessCameraProvider.getInstance(activity)
             cameraProviderFuture = future
 
@@ -247,17 +256,91 @@ class ExergameCameraPlugin(private val activity: Activity) : Plugin(activity) {
     private fun analyze(image: ImageProxy) {
         image.use {
             try {
-                val bitmap: Bitmap = image.toBitmap()
+                val bitmap: Bitmap = rotateUpright(image.toBitmap(), image.imageInfo.rotationDegrees)
+
+                // JPEG for the video preview (full resolution).
                 val stream = ByteArrayOutputStream()
                 bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, stream)
-
                 latestWidth = bitmap.width
                 latestHeight = bitmap.height
                 latestJpeg = stream.toByteArray()
+
+                // Body-pose detection (MoveNet via LiteRT, GPU delegate when
+                // available) on a capped copy: the detection preprocessing
+                // stays cheap at high camera resolutions.
+                val analysisBitmap = downscaleForDetection(bitmap)
+                val result = detector.detect(analysisBitmap)
+
+                // The keypoints come back in analysis-bitmap coordinates; map
+                // them back to the full frame for the frontend skeleton.
+                val factor = bitmap.width.toDouble() / analysisBitmap.width
+                latestKeypoints = keypointsToJsArray(result.keypoints, factor)
+                latestInferenceMs = result.inferenceMs
+                latestPreprocessMs = result.preprocessMs
+                providerKind = result.provider
             } catch (e: Exception) {
-                Logger.error("failed to process frame: ${e.message}")
+                Logger.error("frame processing failed: ${e.message}")
             }
         }
+    }
+
+    // The analyzer receives frames in sensor orientation (landscape buffers
+    // even in a portrait app) and `toBitmap()` does not apply
+    // `imageInfo.rotationDegrees`, so without this step the preview arrives
+    // rotated by 90°. Rotate the bitmap upright; the JPEG, the reported
+    // dimensions and the keypoint coordinates all follow the rotated bitmap,
+    // keeping them consistent with each other.
+    private fun rotateUpright(bitmap: Bitmap, rotationDegrees: Int): Bitmap {
+        if (rotationDegrees == 0) {
+            return bitmap
+        }
+
+        val matrix = Matrix()
+        matrix.postRotate(rotationDegrees.toFloat())
+        val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        if (rotated != bitmap) {
+            bitmap.recycle()
+        }
+        return rotated
+    }
+
+    // Downscale the frame for detection (MoveNet needs only 192×192): the
+    // keypoints are mapped back to the full frame afterwards.
+    private fun downscaleForDetection(bitmap: Bitmap): Bitmap {
+        if (bitmap.width <= ANALYSIS_MAX_WIDTH) {
+            return bitmap
+        }
+
+        val height = (bitmap.height.toDouble() * ANALYSIS_MAX_WIDTH / bitmap.width)
+            .roundToInt()
+            .coerceAtLeast(1)
+        return Bitmap.createScaledBitmap(bitmap, ANALYSIS_MAX_WIDTH, height, true)
+    }
+
+    private fun keypointsToJsArray(keypoints: List<NamedKeypoint>, factor: Double): JSArray {
+        val arr = JSArray()
+        for (keypoint in keypoints) {
+            val obj = JSObject()
+            obj.put("name", keypoint.name)
+            obj.put("x", keypoint.x * factor)
+            obj.put("y", keypoint.y * factor)
+            obj.put("score", keypoint.score)
+            arr.put(obj)
+        }
+        return arr
+    }
+
+    private fun keypointsToJsArray(keypoints: List<NamedKeypoint>): JSArray {
+        val arr = JSArray()
+        for (keypoint in keypoints) {
+            val obj = JSObject()
+            obj.put("name", keypoint.name)
+            obj.put("x", keypoint.x)
+            obj.put("y", keypoint.y)
+            obj.put("score", keypoint.score)
+            arr.put(obj)
+        }
+        return arr
     }
 
     @Command
@@ -279,6 +362,10 @@ class ExergameCameraPlugin(private val activity: Activity) : Plugin(activity) {
         response.put("width", latestWidth)
         response.put("height", latestHeight)
         response.put("jpeg", encoded)
+        response.put("keypoints", latestKeypoints ?: JSArray())
+        response.put("inferenceMs", latestInferenceMs)
+        response.put("preprocessMs", latestPreprocessMs)
+        response.put("provider", providerKind)
         invoke.resolve(response)
     }
 
@@ -288,7 +375,6 @@ class ExergameCameraPlugin(private val activity: Activity) : Plugin(activity) {
             analysisUseCase?.let { analysis -> cameraProvider?.unbind(analysis) }
             cameraProvider?.unbindAll()
             analysisUseCase = null
-            latestJpeg = null
             invoke.resolve()
         } catch (e: Exception) {
             invoke.reject(e.message ?: e.toString())
