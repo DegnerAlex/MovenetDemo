@@ -26,7 +26,8 @@ RUN apt-get install -y \
     libwayland-cursor0
 
 RUN apt-get install -y \
-    clang
+    clang \
+    fuse3
 
 # CUDA 13.1 runtime libraries from multiverse — required by the ONNX Runtime
 # CUDA EP: libcudart.so.13, libcublas.so.13, libcublasLt.so.13, libcurand.so.10.

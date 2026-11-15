@@ -2,6 +2,7 @@ mod camera;
 mod movenet;
 
 use camera::CameraStreamState;
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -27,6 +28,14 @@ pub fn run() {
                 .build(),
         )
         .manage(CameraStreamState::default())
+        .setup(|app| {
+            // Needed so movenet can find the ONNX Runtime libraries bundled
+            // into AppImage builds.
+            if let Ok(dir) = app.path().resource_dir() {
+                movenet::set_resource_dir(dir);
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             camera::list_cameras,
             camera::list_resolutions,

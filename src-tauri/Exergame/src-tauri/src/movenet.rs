@@ -8,6 +8,10 @@ use tracing_subscriber::{Layer as _, layer::SubscriberExt};
 const MOVENET_MODEL: &[u8] = include_bytes!("../movenet/model.onnx");
 const MOVENET_INPUT_SIZE: u32 = 256;
 
+/// CPU build of ONNX Runtime, embedded into the binary so that raw (non-bundled)
+/// builds stay self-sufficient even when no library exists next to the executable.
+const ORT_CPU_LIB: &[u8] = include_bytes!("../ort/libonnxruntime.so");
+
 const KEYPOINT_NAMES: [&str; 17] = [
     "nose",
     "leftEye",
@@ -34,6 +38,14 @@ static POSE_SESSION: OnceLock<Result<Mutex<Session>, String>> = OnceLock::new();
 /// registered with the loaded ONNX Runtime; "CPU" otherwise.
 static GPU_EP_REGISTERED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static PROVIDER_PROBE_INSTALLED: OnceLock<()> = OnceLock::new();
+
+/// Tauri resource directory (set from `lib.rs` setup). In AppImage builds it
+/// contains the bundled CPU and GPU ONNX Runtime libraries.
+static RESOURCE_DIR: OnceLock<std::path::PathBuf> = OnceLock::new();
+
+pub fn set_resource_dir(dir: std::path::PathBuf) {
+    let _ = RESOURCE_DIR.set(dir);
+}
 
 /// Tracing layer that captures ort events about execution provider
 /// registration: any successfully registered GPU-family EP (CUDA, ROCm,
@@ -71,6 +83,57 @@ impl tracing::field::Visit for MessageVisitor {
     }
 }
 
+/// Preloads shared libraries from `dir` with RTLD_GLOBAL and leaks the
+/// handles: the libraries stay loaded for the whole process lifetime, which
+/// lets the CUDA provider's dependencies (and ORT's libcudnn.so dlopen)
+/// resolve by soname afterwards.
+fn preload_libraries(dir: &std::path::Path, names: &[&str]) {
+    for name in names {
+        let path = dir.join(name);
+        if !path.exists() {
+            continue;
+        }
+
+        // Safety: dlopen of a regular library file, single-threaded context
+        // (session initialization), the handle is intentionally leaked.
+        unsafe {
+            if let Ok(lib) = libloading::os::unix::Library::open(
+                Some(&path),
+                libloading::os::unix::RTLD_NOW | libloading::os::unix::RTLD_GLOBAL,
+            ) {
+                std::mem::forget(lib);
+            }
+        }
+    }
+}
+
+/// Extracts the embedded CPU build into a per-machine temp cache and returns
+/// its path. The file is written atomically (temp + rename) and reused when
+/// its size matches the embedded copy.
+fn ensure_embedded_ort() -> Option<std::path::PathBuf> {
+    let dir = std::env::temp_dir().join("exergame-ort");
+    let path = dir.join("libonnxruntime.so");
+
+    if let Ok(meta) = std::fs::metadata(&path) {
+        if meta.len() == ORT_CPU_LIB.len() as u64 {
+            return Some(path);
+        }
+    }
+
+    std::fs::create_dir_all(&dir).ok()?;
+    let tmp = dir.join("libonnxruntime.so.tmp");
+    std::fs::write(&tmp, ORT_CPU_LIB).ok()?;
+    // A stale file from another run may block the rename; retry once.
+    std::fs::rename(&tmp, &path)
+        .or_else(|_| {
+            std::fs::remove_file(&path).ok();
+            std::fs::rename(&tmp, &path)
+        })
+        .ok()?;
+
+    Some(path)
+}
+
 /// Installs the global tracing subscriber once: ort errors and warnings go to
 /// stdout, while the CUDA usage fact lands in POSE_PROVIDER.
 fn install_provider_probe() {
@@ -97,9 +160,10 @@ fn install_provider_probe() {
 /// 2. `/opt/onnxruntime` (CUDA build from the container image) when an NVIDIA
 ///    driver is present,
 /// 3. `/opt/onnxruntime-rocm` (ROCm build) when a ROCm SDK is present,
-/// 4. the library next to the executable (CPU copy for portable runs),
-/// 5. the CPU build from `src-tauri/ort/` (dev runs),
-/// 6. the system library search path.
+/// 4. the GPU build bundled into AppImage resources (when NVIDIA/ROCm present),
+/// 5. the CPU build bundled into AppImage resources,
+/// 6. the CPU build embedded into the binary (extracted to a temp cache),
+/// 7. the system library search path.
 ///
 /// GPU execution providers (CUDA / ROCm / MIGraphX) are only registered when
 /// the matching provider library sits next to the chosen ONNX Runtime, so CPU
@@ -137,22 +201,50 @@ fn ort_environment() -> Result<ort::environment::Environment, String> {
         candidates.push(std::path::Path::new("/opt/onnxruntime-rocm").join(&dylib_name));
     }
 
-    if let Ok(executable) = std::env::current_exe() {
-        if let Some(dir) = executable.parent() {
-            candidates.push(dir.join(&dylib_name));
+    // Libraries bundled into AppImage builds (Tauri resource directory).
+    if let Some(resource_dir) = RESOURCE_DIR.get() {
+        if nvidia_gpu || rocm_sdk {
+            // GPU build with the CUDA execution provider.
+            candidates.push(resource_dir.join("ort-gpu-bundle/libonnxruntime-gpu.so"));
+        }
+
+        // CPU build as the last resource fallback.
+        candidates.push(resource_dir.join("ort/libonnxruntime.so"));
+    }
+
+    let mut chosen = candidates.iter().find(|path| path.exists()).cloned();
+
+    // Last resort: the CPU build embedded into the binary (extracted to a temp
+    // cache once per boot). Keeps raw binaries self-sufficient without any
+    // files next to the executable.
+    if chosen.is_none() {
+        if let Some(path) = ensure_embedded_ort() {
+            candidates.push(path.clone());
+            chosen = Some(path);
         }
     }
 
-    // CPU build kept in the repository (note: only meaningful where the
-    // build-time manifest path exists, e.g. dev runs inside the container).
-    candidates.push(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("ort")
-            .join(&dylib_name),
-    );
+    // In bundled builds the CUDA/cuDNN runtime libraries sit next to the ONNX
+    // Runtime library, but they are not on the loader search path (LD_LIBRARY_PATH
+    // cannot be changed after the process started). Preload them with
+    // RTLD_GLOBAL so that the CUDA provider's dependencies resolve by soname.
+    if let Some(dir) = chosen.as_ref().and_then(|path| path.parent()) {
+        if dir.join("libcudart.so.13").exists() {
+            preload_libraries(
+                dir,
+                &[
+                    "libcudart.so.13",
+                    "libcublas.so.13",
+                    "libcublasLt.so.13",
+                    "libcurand.so.10",
+                    "libcudnn.so",
+                ],
+            );
+        }
+    }
 
-    let (environment, ort_dir) = if let Some(path) = candidates.iter().find(|path| path.exists()) {
-        let environment = ort::init_from(path)
+    let (environment, ort_dir) = if let Some(path) = chosen {
+        let environment = ort::init_from(&path)
             .map_err(|err| format!("Failed to load {}: {err}", path.display()))?
             .with_name("exergame");
         let dir = path

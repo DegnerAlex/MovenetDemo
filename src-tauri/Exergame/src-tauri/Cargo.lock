@@ -1153,6 +1153,7 @@ dependencies = [
 name = "exergame"
 version = "0.1.0"
 dependencies = [
+ "libloading 0.9.1",
  "ndarray 0.15.6",
  "nokhwa",
  "ort",
