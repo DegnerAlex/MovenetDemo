@@ -1,12 +1,13 @@
 use ort::session::Session;
-use ort::value::Tensor;
+use ort::value::{Tensor, TensorElementType, ValueType};
 use serde::Serialize;
 use std::sync::{Mutex, OnceLock};
 use tracing_subscriber::{Layer as _, layer::SubscriberExt};
 
-// MoveNet SinglePose Thunder, embedded into the binary so it does not depend on the working directory.
+// MoveNet SinglePose Lightning, embedded into the binary so it does not
+// depend on the working directory. Same model as the Android plugin ships.
 const MOVENET_MODEL: &[u8] = include_bytes!("../movenet/model.onnx");
-const MOVENET_INPUT_SIZE: u32 = 256;
+const MOVENET_INPUT_SIZE: u32 = 192;
 
 /// CPU build of ONNX Runtime, embedded into the binary so that raw (non-bundled)
 /// desktop builds stay self-sufficient even when no library exists next to the
@@ -106,8 +107,6 @@ fn preload_libraries(dir: &std::path::Path, names: &[&str]) {
                 libloading::os::unix::RTLD_NOW | libloading::os::unix::RTLD_GLOBAL,
             ) {
                 std::mem::forget(lib);
-            } else if std::env::var("EXERGAME_SELFTEST").is_ok_and(|value| !value.is_empty()) {
-                eprintln!("selftest: preload failed: {}", path.display());
             }
         }
     }
@@ -224,32 +223,6 @@ fn ort_environment() -> Result<ort::environment::Environment, String> {
     }
 
     let mut chosen = candidates.iter().find(|path| path.exists()).cloned();
-
-    // Self-test diagnostics (EXERGAME_SELFTEST=1): show which ONNX Runtime
-    // library was chosen and what sits next to it.
-    #[cfg(not(target_os = "android"))]
-    if std::env::var("EXERGAME_SELFTEST").is_ok_and(|value| !value.is_empty()) {
-        match &chosen {
-            Some(path) => {
-                eprintln!("selftest: ORT dylib: {}", path.display());
-                if let Some(dir) = path.parent() {
-                    for name in [
-                        "libonnxruntime_providers_cuda.so",
-                        "libonnxruntime_providers_shared.so",
-                        "libcudart.so.13",
-                        "libcudnn.so",
-                    ] {
-                        eprintln!(
-                            "selftest:   {} {}",
-                            if dir.join(name).exists() { "yes" } else { "no " },
-                            name
-                        );
-                    }
-                }
-            }
-            None => eprintln!("selftest: ORT dylib: <none, will use embedded/system>"),
-        }
-    }
 
     #[cfg(target_os = "android")]
     if chosen.is_none() {
@@ -433,15 +406,17 @@ pub struct PoseEstimate {
     pub provider: &'static str,
 }
 
-/// Fits a frame into the MoveNet input: 256×256×3 (int32), keeping the aspect
-/// ratio and padding the borders with zeros.
+/// Fits a frame into the MoveNet input: square side × side with `channels`
+/// per pixel (3 = RGB, 4 = RGBA with opaque alpha), the frame scaled to fit
+/// (aspect kept) and the borders padded with zeros.
 /// Nearest sampling straight from the buffer: `imageops::resize` in image 0.24
 /// costs tens of milliseconds per frame and killed the FPS.
 fn preprocess_frame(
     width: u32,
     height: u32,
     rgb: &[u8],
-) -> Result<(Vec<i32>, f32, f32, u32, u32), String> {
+    channels: usize,
+) -> Result<(Vec<u8>, f32, f32, u32, u32), String> {
     if width == 0 || height == 0 || rgb.len() < width as usize * height as usize * 3 {
         return Err("Failed to read RGB frame".to_string());
     }
@@ -454,7 +429,7 @@ fn preprocess_frame(
     let pad_x = (MOVENET_INPUT_SIZE - scaled_width) / 2;
     let pad_y = (MOVENET_INPUT_SIZE - scaled_height) / 2;
 
-    let mut input = vec![0_i32; side * side * 3];
+    let mut input = vec![0_u8; side * side * channels];
 
     let src_width = width as usize;
     for out_y in 0..scaled_height as usize {
@@ -465,11 +440,15 @@ fn preprocess_frame(
             let src_x = (((out_x as f32 + 0.5) / scale).floor() as usize).min(src_width - 1);
 
             let src = (src_y * src_width + src_x) * 3;
-            let offset = ((out_y + pad_y as usize) * side + (out_x + pad_x as usize)) * 3;
+            let offset = ((out_y + pad_y as usize) * side + (out_x + pad_x as usize)) * channels;
 
-            input[offset] = rgb[src] as i32;
-            input[offset + 1] = rgb[src + 1] as i32;
-            input[offset + 2] = rgb[src + 2] as i32;
+            input[offset] = rgb[src];
+            input[offset + 1] = rgb[src + 1];
+            input[offset + 2] = rgb[src + 2];
+            if channels == 4 {
+                // RGBA input: opaque alpha channel.
+                input[offset + 3] = 255;
+            }
         }
     }
 
@@ -482,21 +461,55 @@ fn preprocess_frame(
     ))
 }
 
-fn run_movenet(input: Vec<i32>) -> Result<Vec<f32>, String> {
+fn run_movenet(letterboxed: Vec<u8>, channels: usize) -> Result<Vec<f32>, String> {
     let session = pose_session()?;
     let mut session = session
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
 
-    let input = Tensor::from_array((
-        [1usize, MOVENET_INPUT_SIZE as usize, MOVENET_INPUT_SIZE as usize, 3],
-        input,
-    ))
-    .map_err(|err| err.to_string())?;
+    let shape = [
+        1usize,
+        MOVENET_INPUT_SIZE as usize,
+        MOVENET_INPUT_SIZE as usize,
+        channels,
+    ];
 
-    let outputs = session
-        .run(ort::inputs![input])
-        .map_err(|err| err.to_string())?;
+    // MoveNet exports differ in the input element type (the tflite-derived
+    // Lightning build takes uint8, the Thunder ONNX export took int32): build
+    // the tensor for whatever this session expects.
+    let dtype = session.inputs().first().map(|outlet| outlet.dtype().clone());
+    let outputs = match dtype.as_ref() {
+        Some(ValueType::Tensor {
+            ty: TensorElementType::Uint8,
+            ..
+        }) => {
+            let input = Tensor::from_array((shape, letterboxed)).map_err(|err| err.to_string())?;
+            session.run(ort::inputs![input]).map_err(|err| err.to_string())
+        }
+        Some(ValueType::Tensor {
+            ty: TensorElementType::Int32,
+            ..
+        }) => {
+            let data = letterboxed
+                .iter()
+                .map(|&value| value as i32)
+                .collect::<Vec<i32>>();
+            let input = Tensor::from_array((shape, data)).map_err(|err| err.to_string())?;
+            session.run(ort::inputs![input]).map_err(|err| err.to_string())
+        }
+        Some(ValueType::Tensor {
+            ty: TensorElementType::Float32,
+            ..
+        }) => {
+            let data = letterboxed
+                .iter()
+                .map(|&value| value as f32)
+                .collect::<Vec<f32>>();
+            let input = Tensor::from_array((shape, data)).map_err(|err| err.to_string())?;
+            session.run(ort::inputs![input]).map_err(|err| err.to_string())
+        }
+        other => return Err(format!("Unsupported MoveNet input type: {other:?}")),
+    }?;
 
     let (_, raw) = outputs[0]
         .try_extract_tensor::<f32>()
@@ -505,14 +518,35 @@ fn run_movenet(input: Vec<i32>) -> Result<Vec<f32>, String> {
     Ok(raw.to_vec())
 }
 
+/// The MoveNet input channel count read from the loaded model: 3 (RGB) or
+/// 4 (RGBA); defaults to 3 when the shape does not say otherwise.
+fn input_channels(session: &Session) -> usize {
+    match session.inputs().first().map(|outlet| outlet.dtype()) {
+        Some(ValueType::Tensor { shape, .. }) => shape
+            .get(3)
+            .copied()
+            .filter(|&dimension| dimension == 3 || dimension == 4)
+            .unwrap_or(3) as usize,
+        _ => 3,
+    }
+}
+
 /// Recognizes a pose on an RGB frame and measures the inference time.
 pub fn recognize_frame(width: u32, height: u32, rgb: &[u8]) -> Result<PoseEstimate, String> {
+    let session = pose_session()?;
+    let channels = {
+        let session = session
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        input_channels(&session)
+    };
+
     let started = std::time::Instant::now();
-    let (input, scale_x, scale_y, pad_x, pad_y) = preprocess_frame(width, height, rgb)?;
+    let (input, scale_x, scale_y, pad_x, pad_y) = preprocess_frame(width, height, rgb, channels)?;
     let preprocess_ms = started.elapsed().as_secs_f64() * 1000.0;
 
     let started = std::time::Instant::now();
-    let raw = run_movenet(input)?;
+    let raw = run_movenet(input, channels)?;
     let inference_ms = started.elapsed().as_secs_f64() * 1000.0;
 
     let total_ms = preprocess_ms + inference_ms;
