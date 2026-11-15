@@ -1,7 +1,32 @@
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  overflow: hidden;
+}
+
+.app-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.camera-preview {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 .camera {
   display: block;
+  flex: 1;
+  min-height: 0;
   width: 100%;
-  height: auto;
-  border-radius: 8px;
+  object-fit: contain;
   background: #000;
 }

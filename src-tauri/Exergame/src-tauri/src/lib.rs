@@ -2,7 +2,7 @@ mod camera;
 mod movenet;
 
 use camera::CameraStreamState;
-use tauri::Manager;
+use tauri::{Manager, RunEvent, WindowEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -36,12 +36,32 @@ pub fn run() {
             }
             Ok(())
         })
+        // The webview may be destroyed without React's unmount handlers
+        // running (e.g. the user closes the window mid-stream). Stop the
+        // capture thread here — joining it before the webview goes away — so
+        // no frames are pushed into a dying webview.
+        .on_window_event(|window, event| {
+            if matches!(event, WindowEvent::Destroyed) {
+                window
+                    .app_handle()
+                    .state::<CameraStreamState>()
+                    .stop();
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             camera::list_cameras,
             camera::list_resolutions,
             camera::start_rust_camera,
             camera::stop_rust_camera
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| match event {
+            // Belt and braces: also stop the stream when the whole app exits,
+            // whatever triggered it.
+            RunEvent::ExitRequested { .. } | RunEvent::Exit => {
+                app.state::<CameraStreamState>().stop();
+            }
+            _ => {}
+        });
 }
