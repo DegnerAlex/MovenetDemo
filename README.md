@@ -1,4 +1,4 @@
-# Movenet Demo
+# Movenet FPS Tester
 
 A desktop and Android app that shows your camera feed and detects your body
 pose in real time: 17 skeleton points (head, shoulders, elbows, hips, knees…)
