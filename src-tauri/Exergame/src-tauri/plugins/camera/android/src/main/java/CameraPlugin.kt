@@ -6,11 +6,12 @@ import android.graphics.Bitmap
 import android.os.Build
 import android.util.Base64
 import android.util.Size
+import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
-import androidx.camera.core.ResolutionSelector
-import androidx.camera.core.ResolutionStrategy
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
@@ -53,6 +54,13 @@ class ListResolutionsArgs {
     ]
 )
 class ExergameCameraPlugin(private val activity: Activity) : Plugin(activity) {
+    companion object {
+        init {
+            // Load ONNX Runtime once, before the Rust side dlopens it by name.
+            System.loadLibrary("onnxruntime")
+        }
+    }
+
     private var cameraProviderFuture: ListenableFuture<ProcessCameraProvider>? = null
     private var cameraProvider: ProcessCameraProvider? = null
     private var analysisUseCase: ImageAnalysis? = null
@@ -176,7 +184,9 @@ class ExergameCameraPlugin(private val activity: Activity) : Plugin(activity) {
                     val selector = if (args.cameraId != null) {
                         CameraSelector.Builder()
                             .addCameraFilter { infos ->
-                                infos.filter { it.cameraId == args.cameraId }
+                                infos.filter { info ->
+                                    Camera2CameraInfo.from(info).getCameraId() == args.cameraId
+                                }
                             }
                             .build()
                     } else {
@@ -205,7 +215,7 @@ class ExergameCameraPlugin(private val activity: Activity) : Plugin(activity) {
 
                     val owner = activity as LifecycleOwner
                     provider.unbindAll()
-                    camera = provider.bindToLifecycle(owner, selector, analysis)
+                    provider.bindToLifecycle(owner, selector, analysis)
 
                     invoke.resolve()
                 } catch (e: Exception) {

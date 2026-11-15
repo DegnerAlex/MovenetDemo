@@ -33,5 +33,8 @@ dependencies {
     implementation("androidx.camera:camera-camera2:${camerax_version}")
     implementation("androidx.camera:camera-lifecycle:${camerax_version}")
     implementation("androidx.camera:camera-view:${camerax_version}")
+    // ONNX Runtime for Android: packages libonnxruntime.so for every ABI into
+    // the APK; the Rust side loads it via dlopen by bare name.
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.1")
     implementation(project(":tauri-android"))
 }
