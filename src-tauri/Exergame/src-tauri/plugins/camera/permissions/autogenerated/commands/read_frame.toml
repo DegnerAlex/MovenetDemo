@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-read-frame"
+description = "Enables the read_frame command without any pre-configured scope."
+commands.allow = ["read_frame"]
+
+[[permission]]
+identifier = "deny-read-frame"
+description = "Denies the read_frame command without any pre-configured scope."
+commands.deny = ["read_frame"]

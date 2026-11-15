@@ -27,13 +27,19 @@ tauri-plugin-log = "2"
 tauri-plugin-dialog = "2.7.2"
 tauri-plugin-fs = "2.5.1"
 
-nokhwa = { version = "0.10", features = ["input-native"] }
+tauri-plugin-exergame-camera = { path = "./plugins/camera" }
 
 ort = { version = "=2.0.0-rc.15", features = ["load-dynamic", "cuda", "rocm", "migraphx"] } # ONNX Runtime library: GPU build in /opt/onnxruntime (container), CPU copy in src-tauri/ort/
 libloading = "0.9" # Preloads CUDA/cuDNN libraries (RTLD_GLOBAL) before ort initialization in AppImage builds
 tracing = "0.1"
 tracing-subscriber = "0.3" # Layer used to track which EP ort actually runs on
 ndarray = "0.15"
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+nokhwa = { version = "0.10", features = ["input-native"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+jpeg-decoder = "0.3"
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

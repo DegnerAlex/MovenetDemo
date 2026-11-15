@@ -55,3 +55,31 @@ RUN mkdir -p /opt/onnxruntime && \
 RUN curl -sL https://deb.nodesource.com/setup_22.x | bash - && \
         apt-get install -y nodejs && \
         npm install --global --allow-scripts=pnpm pnpm
+
+# Android toolchain for `cargo tauri android init/dev/build`:
+# JDK 17 + SDK (platform-tools, android-34, build-tools) + NDK 26.
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+ENV ANDROID_HOME=/opt/android-sdk
+ENV NDK_HOME=${ANDROID_HOME}/ndk/26.3.11579264
+ENV PATH="${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin:${PATH}"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openjdk-17-jdk \
+    unzip
+
+RUN mkdir -p ${ANDROID_HOME}/cmdline-tools && \
+    curl -fsSL -o /tmp/tools.zip \
+      https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip && \
+    unzip -q /tmp/tools.zip -d ${ANDROID_HOME}/cmdline-tools && \
+    mv ${ANDROID_HOME}/cmdline-tools/cmdline-tools ${ANDROID_HOME}/cmdline-tools/latest && \
+    rm /tmp/tools.zip
+
+RUN yes | sdkmanager --licenses > /dev/null && \
+    sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "ndk;26.3.11579264" > /dev/null
+
+# Rust targets for Android (arm64, armv7, x86_64, x86 emulators).
+RUN rustup target add \
+    aarch64-linux-android \
+    armv7-linux-androideabi \
+    i686-linux-android \
+    x86_64-linux-android

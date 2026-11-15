@@ -20,6 +20,25 @@ fn main() {
 
     println!("cargo:rerun-if-changed=build.rs");
 
+    // Android builds cross-compile in this same container: the GPU bundle
+    // below is an x86_64 build and must never be assembled (or left over from
+    // a desktop build) for the Android package. The static resources glob
+    // (target/release/ort-gpu-bundle/*) is emptied instead, so nothing CUDA
+    // ends up in the APK.
+    if std::env::var("TARGET")
+        .map(|target| target.contains("android"))
+        .unwrap_or(false)
+    {
+        let glob_dir = Path::new("target/release/ort-gpu-bundle");
+        let _ = fs::remove_dir_all(glob_dir);
+        let _ = fs::create_dir_all(glob_dir);
+        let _ = fs::write(
+            glob_dir.join("CPU_ONLY_BUILD.txt"),
+            "Android build: ONNX Runtime ships as a JNI library, not from here.\n",
+        );
+        return;
+    }
+
     // OUT_DIR = <target>/<profile>/build/exergame-<hash>/out → walk up to the
     // profile directory (target/release or target/debug).
     let Some(profile_dir) = std::env::var_os("OUT_DIR")

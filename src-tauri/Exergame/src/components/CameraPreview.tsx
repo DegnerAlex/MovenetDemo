@@ -35,6 +35,21 @@ const MIN_KEYPOINT_SCORE = 0.3;
 const KEYPOINT_RADIUS = 10;
 const KEYPOINT_REFERENCE_WIDTH = 1024;
 
+// Skeleton bones: pairs of keypoint indices (MoveNet/COCO-17 order) connected
+// by lines.
+const POSE_EDGES: ReadonlyArray<readonly [number, number]> = [
+    [1, 3], [2, 4],        // eyes ↔ ears
+    [5, 6],                // shoulders
+    [5, 7], [7, 9],        // left arm
+    [6, 8], [8, 10],       // right arm
+    [11, 12],              // hips
+    [11, 13], [13, 15],    // left leg
+    [12, 14], [14, 16],    // right leg
+];
+
+// Bone line width at the reference resolution; scales like the dot radius.
+const SKELETON_LINE_WIDTH = 6;
+
 // Sliding-average window for recognition time and FPS on the badge.
 const SMOOTHING_WINDOW = 10;
 const FPS_SMOOTHING_WINDOW = 20;
@@ -62,6 +77,16 @@ type CameraPreviewState = {
  * The parent feeds frames through `pushFrame()` and calls `clear()` when the
  * stream stops.
  */
+// Midpoint of two keypoints, or `null` when either point is missing or too
+// uncertain.
+function midpoint(a?: PoseKeypoint, b?: PoseKeypoint): {x: number; y: number} | null {
+    if (!a || !b || a.score < MIN_KEYPOINT_SCORE || b.score < MIN_KEYPOINT_SCORE) {
+        return null;
+    }
+
+    return {x: (a.x + b.x) / 2, y: (a.y + b.y) / 2};
+}
+
 export class CameraPreview extends Component<CameraPreviewProps, CameraPreviewState> {
     state: CameraPreviewState = {
         resolution: null,
@@ -229,9 +254,74 @@ export class CameraPreview extends Component<CameraPreviewProps, CameraPreviewSt
             return;
         }
 
+        // Central points of the shoulders and the pelvis, connected by a spine
+        // line (the side shoulder→hip lines are intentionally not drawn).
+        const shoulderCenter = midpoint(pose.keypoints[5], pose.keypoints[6]);
+        const hipCenter = midpoint(pose.keypoints[11], pose.keypoints[12]);
+
+        // Face: the eyes connect to their center, the center connects to the
+        // nose.
+        const eyeCenter = midpoint(pose.keypoints[1], pose.keypoints[2]);
+        const nose = pose.keypoints[0];
+        const leftEye = pose.keypoints[1];
+        const rightEye = pose.keypoints[2];
+
         context.save();
-        context.fillStyle = "#00e676";
         const radius = (KEYPOINT_RADIUS * width) / KEYPOINT_REFERENCE_WIDTH;
+        const lineWidth = (SKELETON_LINE_WIDTH * width) / KEYPOINT_REFERENCE_WIDTH;
+
+        // Bones first, so the joints sit on top of the line ends.
+        context.strokeStyle = "#ffffff";
+        context.lineWidth = lineWidth;
+        context.lineCap = "round";
+        for (const [from, to] of POSE_EDGES) {
+            const a = pose.keypoints[from];
+            const b = pose.keypoints[to];
+            if (
+                !a || !b
+                || a.score < MIN_KEYPOINT_SCORE
+                || b.score < MIN_KEYPOINT_SCORE
+            ) {
+                continue;
+            }
+
+            context.beginPath();
+            context.moveTo(a.x, a.y);
+            context.lineTo(b.x, b.y);
+            context.stroke();
+        }
+
+        // Spine: shoulders center ↔ pelvis center.
+        if (shoulderCenter && hipCenter) {
+            context.beginPath();
+            context.moveTo(shoulderCenter.x, shoulderCenter.y);
+            context.lineTo(hipCenter.x, hipCenter.y);
+            context.stroke();
+        }
+
+        // Face: eyes ↔ eyes center ↔ nose.
+        if (eyeCenter) {
+            for (const eye of [leftEye, rightEye]) {
+                if (!eye || eye.score < MIN_KEYPOINT_SCORE) {
+                    continue;
+                }
+
+                context.beginPath();
+                context.moveTo(eyeCenter.x, eyeCenter.y);
+                context.lineTo(eye.x, eye.y);
+                context.stroke();
+            }
+        }
+
+        if (eyeCenter && nose && nose.score >= MIN_KEYPOINT_SCORE) {
+            context.beginPath();
+            context.moveTo(eyeCenter.x, eyeCenter.y);
+            context.lineTo(nose.x, nose.y);
+            context.stroke();
+        }
+
+        // Joints.
+        context.fillStyle = "#ffffff";
         for (const keypoint of pose.keypoints) {
             if (keypoint.score < MIN_KEYPOINT_SCORE) {
                 continue;
@@ -241,6 +331,18 @@ export class CameraPreview extends Component<CameraPreviewProps, CameraPreviewSt
             context.arc(keypoint.x, keypoint.y, radius, 0, Math.PI * 2);
             context.fill();
         }
+
+        // Torso and face center points.
+        for (const center of [shoulderCenter, hipCenter, eyeCenter]) {
+            if (!center) {
+                continue;
+            }
+
+            context.beginPath();
+            context.arc(center.x, center.y, radius, 0, Math.PI * 2);
+            context.fill();
+        }
+
         context.restore();
     }
 

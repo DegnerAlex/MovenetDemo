@@ -1,7 +1,24 @@
-mod camera;
 mod movenet;
 
+#[cfg(not(target_os = "android"))]
+mod camera;
+#[cfg(target_os = "android")]
+mod camera_android;
+
+// The re-exports are consumed by `generate_handler!` below; the macro expands
+// to code the compiler does not count as a "use", hence the allow.
+#[cfg_attr(not(target_os = "android"), allow(unused_imports))]
+#[cfg(not(target_os = "android"))]
+use camera::{list_cameras, start_rust_camera, stop_rust_camera};
+#[cfg(target_os = "android")]
+#[allow(unused_imports)]
+use camera_android::{list_cameras, start_rust_camera, stop_rust_camera};
+
+#[cfg(not(target_os = "android"))]
 use camera::CameraStreamState;
+#[cfg(target_os = "android")]
+use camera_android::CameraStreamState;
+
 use tauri::{Manager, RunEvent, WindowEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -28,6 +45,9 @@ pub fn run() {
                 .build(),
         )
         .manage(CameraStreamState::default())
+        // Mobile: the camera runs in the Kotlin plugin (CameraX). Desktop:
+        // the plugin is inert and `camera.rs` captures with nokhwa instead.
+        .plugin(tauri_plugin_exergame_camera::init())
         .setup(|app| {
             // Needed so movenet can find the ONNX Runtime libraries bundled
             // into AppImage builds.

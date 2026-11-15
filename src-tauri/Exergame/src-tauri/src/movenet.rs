@@ -9,7 +9,10 @@ const MOVENET_MODEL: &[u8] = include_bytes!("../movenet/model.onnx");
 const MOVENET_INPUT_SIZE: u32 = 256;
 
 /// CPU build of ONNX Runtime, embedded into the binary so that raw (non-bundled)
-/// builds stay self-sufficient even when no library exists next to the executable.
+/// desktop builds stay self-sufficient even when no library exists next to the
+/// executable. On Android the library ships as a JNI lib instead (see
+/// plugins/camera/build.rs), so nothing is embedded there.
+#[cfg(not(target_os = "android"))]
 const ORT_CPU_LIB: &[u8] = include_bytes!("../ort/libonnxruntime.so");
 
 const KEYPOINT_NAMES: [&str; 17] = [
@@ -110,6 +113,7 @@ fn preload_libraries(dir: &std::path::Path, names: &[&str]) {
 /// Extracts the embedded CPU build into a per-machine temp cache and returns
 /// its path. The file is written atomically (temp + rename) and reused when
 /// its size matches the embedded copy.
+#[cfg(not(target_os = "android"))]
 fn ensure_embedded_ort() -> Option<std::path::PathBuf> {
     let dir = std::env::temp_dir().join("exergame-ort");
     let path = dir.join("libonnxruntime.so");
@@ -202,6 +206,9 @@ fn ort_environment() -> Result<ort::environment::Environment, String> {
     }
 
     // Libraries bundled into AppImage builds (Tauri resource directory).
+    // Desktop only: those libraries are x86_64 builds. On Android the ONNX
+    // Runtime ships as a JNI library (arm64) instead.
+    #[cfg(not(target_os = "android"))]
     if let Some(resource_dir) = RESOURCE_DIR.get() {
         if nvidia_gpu || rocm_sdk {
             // GPU build with the CUDA execution provider.
@@ -214,9 +221,17 @@ fn ort_environment() -> Result<ort::environment::Environment, String> {
 
     let mut chosen = candidates.iter().find(|path| path.exists()).cloned();
 
-    // Last resort: the CPU build embedded into the binary (extracted to a temp
-    // cache once per boot). Keeps raw binaries self-sufficient without any
-    // files next to the executable.
+    #[cfg(target_os = "android")]
+    if chosen.is_none() {
+        // Android: the ONNX Runtime build ships as a JNI library inside the
+        // APK; dlopen by bare name resolves it from the app's native lib dir.
+        chosen = Some(std::path::PathBuf::from("libonnxruntime.so"));
+    }
+
+    // Last resort (desktop): the CPU build embedded into the binary (extracted
+    // to a temp cache once per boot). Keeps raw binaries self-sufficient
+    // without any files next to the executable.
+    #[cfg(not(target_os = "android"))]
     if chosen.is_none() {
         if let Some(path) = ensure_embedded_ort() {
             candidates.push(path.clone());
@@ -224,10 +239,12 @@ fn ort_environment() -> Result<ort::environment::Environment, String> {
         }
     }
 
-    // In bundled builds the CUDA/cuDNN runtime libraries sit next to the ONNX
-    // Runtime library, but they are not on the loader search path (LD_LIBRARY_PATH
-    // cannot be changed after the process started). Preload them with
-    // RTLD_GLOBAL so that the CUDA provider's dependencies resolve by soname.
+    // In bundled desktop builds the CUDA/cuDNN runtime libraries sit next to
+    // the ONNX Runtime library, but they are not on the loader search path
+    // (LD_LIBRARY_PATH cannot be changed after the process started). Preload
+    // them with RTLD_GLOBAL so that the CUDA provider's dependencies resolve
+    // by soname afterwards. Android never preloads: its ORT build is CPU-only.
+    #[cfg(not(target_os = "android"))]
     if let Some(dir) = chosen.as_ref().and_then(|path| path.parent()) {
         if dir.join("libcudart.so.13").exists() {
             preload_libraries(
@@ -243,7 +260,7 @@ fn ort_environment() -> Result<ort::environment::Environment, String> {
         }
     }
 
-    let (environment, ort_dir) = if let Some(path) = chosen {
+    let (mut environment, ort_dir) = if let Some(path) = chosen {
         let environment = ort::init_from(&path)
             .map_err(|err| format!("Failed to load {}: {err}", path.display()))?
             .with_name("exergame");
@@ -261,32 +278,45 @@ fn ort_environment() -> Result<ort::environment::Environment, String> {
 
     // Register only the providers the loaded build actually ships: the CUDA
     // provider lives in libonnxruntime_providers_cuda.so, the ROCm provider in
-    // libonnxruntime_providers_rocm.so, next to the main library.
-    let mut providers: Vec<ort::ep::ExecutionProviderDispatch> = Vec::new();
-    let force_cpu = std::env::var("EXERGAME_FORCE_CPU").is_ok_and(|value| !value.is_empty());
+    // libonnxruntime_providers_rocm.so, next to the main library. Desktop
+    // only: Android builds are CPU-only (the shipped ORT has no GPU providers
+    // and none of the provider libraries are packaged).
+    #[cfg(not(target_os = "android"))]
+    {
+        let mut providers: Vec<ort::ep::ExecutionProviderDispatch> = Vec::new();
+        let force_cpu =
+            std::env::var("EXERGAME_FORCE_CPU").is_ok_and(|value| !value.is_empty());
 
-    if !force_cpu {
-        if ort_dir.join("libonnxruntime_providers_cuda.so").exists() {
-            providers.push(ort::ep::CUDA::default().with_device_id(0).build());
+        if !force_cpu {
+            if ort_dir.join("libonnxruntime_providers_cuda.so").exists() {
+                providers.push(ort::ep::CUDA::default().with_device_id(0).build());
+            }
+
+            if ort_dir.join("libonnxruntime_providers_rocm.so").exists() {
+                providers.push(ort::ep::ROCm::default().with_device_id(0).build());
+            }
+
+            if ort_dir
+                .join("libonnxruntime_providers_migraphx.so")
+                .exists()
+            {
+                providers.push(ort::ep::MIGraphX::default().build());
+            }
         }
 
-        if ort_dir.join("libonnxruntime_providers_rocm.so").exists() {
-            providers.push(ort::ep::ROCm::default().with_device_id(0).build());
-        }
-
-        if ort_dir
-            .join("libonnxruntime_providers_migraphx.so")
-            .exists()
-        {
-            providers.push(ort::ep::MIGraphX::default().build());
-        }
+        environment = if providers.is_empty() {
+            environment
+        } else {
+            environment.with_execution_providers(providers)
+        };
     }
 
-    let environment = if providers.is_empty() {
-        environment
-    } else {
-        environment.with_execution_providers(providers)
-    };
+    #[cfg(target_os = "android")]
+    {
+        // Android ORT is CPU-only; EP registration is intentionally skipped so
+        // no CUDA/ROCm provider attempts (or warnings) happen on the device.
+        let _ = &ort_dir;
+    }
 
     environment
         .build()
