@@ -2,11 +2,16 @@ package com.exergame.camera
 
 import android.Manifest
 import android.app.Activity
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Matrix
+import android.hardware.display.DisplayManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Base64
 import android.util.Size
+import android.view.Surface
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -66,6 +71,7 @@ class ExergameCameraPlugin(private val activity: Activity) : Plugin(activity) {
     private var cameraProvider: ProcessCameraProvider? = null
     private var analysisUseCase: ImageAnalysis? = null
     private val analysisExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    private var displayListenerRegistered = false
 
     // Body-pose detection (MoveNet via LiteRT, GPU delegate when available).
     private val detector = MovenetDetector(activity)
@@ -239,6 +245,29 @@ class ExergameCameraPlugin(private val activity: Activity) : Plugin(activity) {
                     analysis.setAnalyzer(analysisExecutor, ::analyze)
                     analysisUseCase = analysis
 
+                    // CameraX computes every frame's rotationDegrees against
+                    // the use case's targetRotation, which does not follow
+                    // device rotation on its own: without keeping it in sync
+                    // the preview is off by ±90° in landscape. Track the
+                    // display rotation here and update it on display changes.
+                    analysis.targetRotation = displayRotation()
+                    if (!displayListenerRegistered) {
+                        displayListenerRegistered = true
+                        val displayManager =
+                            activity.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+                        // Callbacks are delivered on the main looper.
+                        displayManager.registerDisplayListener(
+                            object : DisplayManager.DisplayListener {
+                                override fun onDisplayAdded(displayId: Int) {}
+                                override fun onDisplayRemoved(displayId: Int) {}
+                                override fun onDisplayChanged(displayId: Int) {
+                                    analysisUseCase?.targetRotation = displayRotation()
+                                }
+                            },
+                            Handler(Looper.getMainLooper())
+                        )
+                    }
+
                     val owner = activity as LifecycleOwner
                     provider.unbindAll()
                     provider.bindToLifecycle(owner, selector, analysis)
@@ -280,6 +309,12 @@ class ExergameCameraPlugin(private val activity: Activity) : Plugin(activity) {
                 Logger.error("frame processing failed: ${e.message}")
             }
         }
+    }
+
+    // The current display rotation (Surface.ROTATION_0/90/180/270) used as
+    // the analyzer's targetRotation.
+    private fun displayRotation(): Int {
+        return activity.window?.decorView?.display?.rotation ?: Surface.ROTATION_0
     }
 
     // The analyzer receives frames in sensor orientation (landscape buffers
