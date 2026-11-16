@@ -83,6 +83,7 @@ release:
 	@echo "Release v$(VERSION) published."
 
 # Re-upload the artifacts to the existing release, replacing old files.
+update: upload
 upload:
 	@mkdir -p $(DIST)
 	cp "$(APPIMAGE_FILE)" "$(DIST_APPIMAGE)"

@@ -124,6 +124,36 @@ body {
   pointer-events: none;
 }
 
+/* Placeholder shown while no camera stream is active: an overlay on top of
+   the always-rendered dark camera canvas, sharing its geometry (including
+   the 60px bleed behind the status row). */
+.camera-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: -60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  color: #7c8ba1;
+  font-size: 0.9rem;
+  background: #000;
+}
+
+/* Horizontal margins for the caption: on narrow screens the wrapped text
+   must not touch the placeholder edges. */
+.camera-placeholder span {
+  padding: 0 1.5rem;
+  text-align: center;
+}
+
+.camera-placeholder svg {
+  opacity: 0.9;
+}
+
 .settings-card {
   position: relative;
   z-index: 1;

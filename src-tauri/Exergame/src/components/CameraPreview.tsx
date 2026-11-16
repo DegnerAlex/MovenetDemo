@@ -218,6 +218,31 @@ export class CameraPreview extends Component<CameraPreviewProps, CameraPreviewSt
                         style={{transform: mirror ? "scaleX(-1)" : undefined}}
                     />
                     <PoseSkeleton pose={pose} mirror={mirror}/>
+                    {!isStreaming && (
+                        <div className="camera-placeholder" aria-hidden="true">
+                            <svg viewBox="0 0 240 160" width="220" height="147" role="presentation">
+                                {/* Webcam body */}
+                                <rect x="60" y="28" width="120" height="92" rx="18"
+                                      fill="#16233a" stroke="#3b4d6b" strokeWidth="2"/>
+                                {/* Lens */}
+                                <circle cx="120" cy="74" r="32" fill="#0d1626" stroke="#4c6079" strokeWidth="2"/>
+                                <circle cx="120" cy="74" r="22" fill="#101a2c"/>
+                                {/* Skeleton figure inside the lens */}
+                                <circle cx="120" cy="66" r="5.5" fill="#dfe7f2"/>
+                                <line x1="120" y1="72" x2="120" y2="88" stroke="#dfe7f2" strokeWidth="2.5" strokeLinecap="round"/>
+                                <line x1="120" y1="77" x2="110" y2="87" stroke="#dfe7f2" strokeWidth="2.5" strokeLinecap="round"/>
+                                <line x1="120" y1="77" x2="130" y2="87" stroke="#dfe7f2" strokeWidth="2.5" strokeLinecap="round"/>
+                                <line x1="120" y1="88" x2="112" y2="98" stroke="#dfe7f2" strokeWidth="2.5" strokeLinecap="round"/>
+                                <line x1="120" y1="88" x2="128" y2="98" stroke="#dfe7f2" strokeWidth="2.5" strokeLinecap="round"/>
+                                {/* Recording dot */}
+                                <circle cx="167" cy="42" r="4" fill="#38bdf8"/>
+                                {/* Stand */}
+                                <rect x="104" y="120" width="32" height="8" rx="4" fill="#3b4d6b"/>
+                                <rect x="112" y="128" width="16" height="12" rx="3" fill="#2c3c57"/>
+                            </svg>
+                            <span>Camera is off — start streaming to see the preview</span>
+                        </div>
+                    )}
                 </div>
                 <div className={`mt-2 is-flex is-flex-wrap-wrap is-justify-content-space-between is-align-items-center${isStreaming ? " status-card" : ""}`}
                      style={{gap: "0.5rem", flexShrink: 0, position: "relative", zIndex: 1}}>
