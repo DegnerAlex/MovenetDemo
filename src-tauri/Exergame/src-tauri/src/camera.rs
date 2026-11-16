@@ -98,33 +98,43 @@ fn open_camera(index: CameraIndex, resolution: Option<Resolution>) -> Result<Cam
         _ => None,
     };
 
-    let mut last_error = String::from("no format could open the camera");
+    let mut errors: Vec<String> = Vec::new();
 
     // RGB: the format the regular webcams negotiate.
     match Camera::new(index.clone(), RequestedFormat::new::<RgbFormat>(kind)) {
         Ok(camera) => return Ok(camera),
-        Err(err) => last_error = err.to_string(),
+        Err(err) => errors.push(err.to_string()),
     }
-    if last_error.contains("not whole number") && device.is_some() {
+    if errors
+        .last()
+        .is_some_and(|err| err.contains("not whole number"))
+        && device.is_some()
+    {
         let _ = normalize_frame_interval(device.expect("checked above"));
-        if let Ok(camera) = Camera::new(index.clone(), RequestedFormat::new::<RgbFormat>(kind)) {
-            return Ok(camera);
+        match Camera::new(index.clone(), RequestedFormat::new::<RgbFormat>(kind)) {
+            Ok(camera) => return Ok(camera),
+            Err(err) => errors.push(err.to_string()),
         }
     }
 
     // YUYV: the format virtual cameras (OBS loopback) expose.
     match Camera::new(index.clone(), RequestedFormat::new::<YuyvFormat>(kind)) {
         Ok(camera) => return Ok(camera),
-        Err(err) => last_error = err.to_string(),
+        Err(err) => errors.push(err.to_string()),
     }
-    if last_error.contains("not whole number") && device.is_some() {
+    if errors
+        .last()
+        .is_some_and(|err| err.contains("not whole number"))
+        && device.is_some()
+    {
         let _ = normalize_frame_interval(device.expect("checked above"));
-        if let Ok(camera) = Camera::new(index.clone(), RequestedFormat::new::<YuyvFormat>(kind)) {
-            return Ok(camera);
+        match Camera::new(index.clone(), RequestedFormat::new::<YuyvFormat>(kind)) {
+            Ok(camera) => return Ok(camera),
+            Err(err) => errors.push(err.to_string()),
         }
     }
 
-    Err(last_error)
+    Err(errors.join("; "))
 }
 
 const V4L2_BUF_TYPE_VIDEO_CAPTURE: u32 = 1;

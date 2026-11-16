@@ -14,6 +14,7 @@ use tauri::{
     Runtime,
 };
 
+#[cfg(target_os = "android")]
 const PLUGIN_IDENTIFIER: &str = "com.exergame.camera";
 
 /// A camera reported by the device.

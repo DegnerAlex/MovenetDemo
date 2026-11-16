@@ -19,10 +19,6 @@
     "core:window:allow-center",
     "core:webview:default",
     "core:app:default",
-    "log:default",
-    "dialog:default",
-    "fs:default",
-    "fs:allow-write-file",
-    "fs:allow-read-file"
+    "log:default"
   ]
 }
