@@ -40,25 +40,55 @@ body {
 }
 
 .app-root {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
-  /* Scroll appears only when the content does not fit (e.g. mobile). */
-  overflow-x: hidden;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(121, 116, 126, 0.45) transparent;
+  overflow: hidden;
+  /* The gap above the placeholder picture and below its caption: one
+     variable keeps the two spacings equal. */
+  --preview-gap: clamp(24px, 5vh, 56px);
   /* Keep the bottom controls clear of the Android system navigation panel. */
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* The scrollable region with the settings: it slides over the pinned camera
+   preview. The scrollbar is invisible; wheel, touch and keyboard scrolling
+   work. The card starts below the whole placeholder block (top gap +
+   picture 147px + caption gap 12px + caption 44px + bottom gap), so the
+   caption is always fully visible and the surrounding gaps are equal — the
+   placeholder content stays centered in the visible preview area at any
+   height. */
+.app-scroll-area {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none; /* Firefox */
+  padding-top: calc(var(--preview-gap) + 203px + var(--preview-gap));
+  padding-bottom: 0;
+}
+
+.app-scroll-area::-webkit-scrollbar {
+  display: none; /* WebKit/Chromium */
+}
+
+/* The card grows to fill the space below its content: no empty gap appears
+   above the screen bottom on tall layouts, and on short ones it scrolls
+   normally. */
+.app-scroll-area > .settings-card {
+  flex: 1 0 auto;
+}
+
 /* During streaming the layout fits by design (the preview is flex-sized and
-   the canvas extends slightly behind the status row on purpose), so the
-   phantom scrollbar from that intentional overflow is suppressed. The status
-   card itself reaches the screen edge; its content is padded by the safe-area
-   inset instead. */
+   the canvas extends slightly behind the status row on purpose), so nothing
+   scrolls at all. The status card itself reaches the screen edge; its
+   content is padded by the safe-area inset instead. */
 .app-root-streaming {
-  overflow: hidden;
   padding-bottom: 0;
 }
 
@@ -84,12 +114,14 @@ body {
   background: rgba(121, 116, 126, 0.7);
 }
 
+/* The camera preview is a pinned backdrop: it fills the whole app area and
+   stays put while the settings scroll over it. The status row sits at its
+   bottom edge; the canvas keeps its 60px bleed behind that row. */
 .camera-preview {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
-  flex: 1;
-  /* Keep a usable preview on small screens; the app scrolls if needed. */
-  min-height: 280px;
 }
 
 /* Stack of the video canvas and the skeleton overlay. Both canvases get the
@@ -126,7 +158,8 @@ body {
 
 /* Placeholder shown while no camera stream is active: an overlay on top of
    the always-rendered dark camera canvas, sharing its geometry (including
-   the 60px bleed behind the status row). */
+   the 60px bleed behind the status row). The picture and the caption sit in
+   the upper zone, which stays visible above the settings card. */
 .camera-placeholder {
   position: absolute;
   top: 0;
@@ -136,18 +169,20 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
+  justify-content: flex-start;
+  gap: 12px;
+  padding-top: var(--preview-gap);
   color: #7c8ba1;
   font-size: 0.9rem;
-  background: #000;
+  background: transparent;
 }
 
-/* Horizontal margins for the caption: on narrow screens the wrapped text
-   must not touch the placeholder edges. */
+/* Horizontal margins for the caption; a fixed two-line height keeps the
+   reserved block (and therefore the surrounding gaps) stable. */
 .camera-placeholder span {
   padding: 0 1.5rem;
   text-align: center;
+  min-height: 44px;
 }
 
 .camera-placeholder svg {

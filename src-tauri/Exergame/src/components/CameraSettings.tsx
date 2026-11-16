@@ -63,7 +63,7 @@ export function CameraSettings(props: CameraSettingsProps) {
     return (
         <Box className="settings-card camera-settings">
             <div className="is-flex is-justify-content-space-between is-align-items-center mb-3">
-                <Heading size={5} className="mb-0">Webcam</Heading>
+                <Heading size={5} className="mb-0">Choose the camera</Heading>
                 <Button
                     size="small"
                     onClick={onRefresh}

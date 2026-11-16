@@ -185,6 +185,7 @@ class App extends Component<AppProps, AppState> {
                     onStop={() => void this.stopStreaming()}
                 />
                 {!isStreaming && (
+                    <div className="app-scroll-area">
                         <CameraSettings
                             cameras={cameras}
                             selectedCamera={selectedCamera}
@@ -202,7 +203,8 @@ class App extends Component<AppProps, AppState> {
                             onStart={() => void this.startStreaming()}
                             onStop={() => void this.stopStreaming()}
                         />
-                    )}
+                    </div>
+                )}
             </div>
         );
     }

@@ -3,3 +3,9 @@
 /.pnpm-store/**/*
 # Release artifacts staged for gh upload
 /dist/
+/dist/*
+/dist/**/*
+
+/src-tauri/Exergame/target/
+/src-tauri/Exergame/target/*
+/src-tauri/Exergame/target/**/*
