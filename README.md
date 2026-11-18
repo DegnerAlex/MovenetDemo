@@ -74,3 +74,52 @@ The artifacts land at:
 `EXERGAME_FORCE_CPU=1` forces the CPU provider even when a GPU is present.
 The badge under the preview always shows which provider actually runs the
 model (`MoveNet: GPU` / `MoveNet: CPU`).
+
+## Download
+
+Grab the ready-to-run builds from the
+[latest release](https://github.com/DegnerAlex/MovenetDemo/releases/latest) —
+no installation needed, just download, `chmod +x` and run:
+
+```bash
+chmod +x movenet-demo_*_amd64.AppImage
+./movenet-demo_*_amd64.AppImage
+```
+
+Latest release:
+
+- `movenet-demo_<version>_amd64.AppImage` — desktop (Linux, x86_64), bundles the ONNX Runtime GPU libraries, so only the NVIDIA driver is needed on the target machine (CUDA path); on CPU-only systems it falls back automatically, on AMD the ROCm build is used when available;
+- `app-universal-release.apk` — signed Android release APK, works on `arm64-v8a` / `armeabi-v7a` devices with any OpenCL-capable GPU (Adreno / Mali / Immortalis / PowerVR), automatic CPU fallback when the GPU delegate cannot start.
+
+Every release page lists the checksums and the changelog (`--generate-notes`
+from the commit history). See the [GPU support](#gpu-support) table above for
+the current platform support details.
+
+## Libraries
+
+Frontend (React / TypeScript):
+
+- [React](https://react.dev) 19 + ReactDOM — UI
+- [react-bulma-components](https://github.com/cztomsik/react-bulma-components) / [Bulma](https://bulma.io) — UI components and styling
+- [@tauri-apps/api](https://v2.tauri.app/reference/javascript/api/) — IPC bridge to the Rust core
+- [@tauri-apps/plugin-log](https://v2.tauri.app/plugin/logging/) — logging from the webview
+
+Rust (desktop core and camera plugin):
+
+- [Tauri](https://v2.tauri.app) 2 — app framework, windowing, IPC
+- [nokhwa](https://github.com/l1npengpeng/nokhwa) — camera capture on desktop (native backend)
+- [ort](https://github.com/pykeio/ort) — ONNX Runtime bindings for MoveNet inference (CUDA / ROCm / CPU)
+- [libloading](https://github.com/nagisa/rust_libloading) — preloads CUDA/cuDNN shared libraries before ONNX Runtime init
+- [serde](https://serde.rs) / serde_json — serialization for IPC and config
+- [tracing](https://tracing.rs) / tracing-subscriber — structured logging, tracks which execution provider actually runs
+- [libc](https://github.com/rust-lang/libc) — raw V4L2 ioctls for the virtual-camera frame-rate workaround
+- [jpeg-decoder](https://github.com/image-rs/jpeg-decoder) — JPEG frame decoding on Android
+- [base64](https://github.com/marshallpierce/rust-base64) — frame transport in the camera plugin
+
+Android (camera plugin):
+
+- [Jetpack CameraX](https://developer.android.com/camerax) — camera capture and lifecycle
+- [LiteRT (TensorFlow Lite)](https://ai.google.dev/edge/litert) + GPU delegate — MoveNet inference on mobile GPUs via OpenCL
+- AndroidX core / appcompat
+
+Build tooling: [Vite](https://vite.dev), [TypeScript](https://www.typescriptlang.org), Cargo, Gradle with Kotlin.
