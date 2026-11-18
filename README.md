@@ -14,20 +14,39 @@ MoveNet SinglePose Lightning: on the desktop it runs through ONNX Runtime with
 CUDA on NVIDIA GPUs (CPU fallback), on Android through LiteRT with the GPU
 delegate. Both platforms ship the same model.
 
+## Features
+
+- Real-time body pose detection from a live camera feed
+- 17 skeleton keypoints (head, shoulders, elbows, hips, knees…) drawn over the video
+- Live performance stats: detection speed and which provider runs the model (`MoveNet: GPU` / `MoveNet: CPU`)
+- MoveNet SinglePose Lightning model, the same one on every platform
+- GPU acceleration: CUDA on desktop NVIDIA GPUs, ROCm on AMD, LiteRT GPU delegate (OpenCL) on Android, with automatic CPU fallback
+- Cross-platform: one codebase for desktop (Linux AppImage) and Android, built with Tauri 2 (Rust) + React
+
+## Models
+
+The app uses a single pose model: [MoveNet SinglePose Lightning](https://www.tensorflow.org/hub/tutorials/movenet)
+(Google, 17 COCO keypoints, 192×192 RGB input). The same model ships on every
+platform in the format native to that runtime, embedded into the app so
+nothing is downloaded at runtime:
+
+| Platform | File | Format | Runtime |
+| --- | --- | --- | --- |
+| Desktop | `application/src-tauri/movenet/model.onnx` | ONNX | ONNX Runtime (CUDA / ROCm / CPU) |
+| Android | `application/src-tauri/plugins/camera/android/src/main/assets/movenet-lightning.tflite` | TensorFlow Lite | LiteRT with the GPU delegate |
+
+The desktop model is compiled into the binary (`include_bytes!`), the Android
+one is packed as an uncompressed asset so LiteRT can memory-map it.
+
 ## Development
 
-Everything (Rust, Node, GPU libraries, the Android SDK) is pre-installed in
-the container, so the only host requirements are [Docker](https://docs.docker.com/get-docker/)
-with the Compose plugin and, for GPU acceleration, the
-[NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
-
 ```bash
-docker compose up
+docker compose up 
 ```
 
-This starts the vite dev server and `cargo tauri dev`: the app window opens
-and hot-reloads as you edit. The first run also builds the container image.
-(`make dev` does the same.)
+- `frontend` — the Vite dev server on `http://localhost:9999`;
+- `movenet` — the Rust application, the window opens on the host desktop.
+
 
 ## Production builds
 
