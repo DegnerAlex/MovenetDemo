@@ -5,10 +5,60 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Tauri + React + Typescript</title>
+    <style>
+      /* Static splash screen: visible the instant the webview opens, before
+         any JS loads. React replaces it with the live splash overlay as soon
+         as it mounts, so the two must look identical. */
+      .splash {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 24px;
+        background: #fef7ff;
+      }
+
+      .splash img {
+        width: 96px;
+        height: 96px;
+        opacity: 0.9;
+      }
+
+      .splash-title {
+        font-family: Roboto, "Segoe UI", system-ui, sans-serif;
+        font-size: 1.25rem;
+        font-weight: 500;
+        color: #1d1b20;
+      }
+
+      .splash-spinner {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        border: 3px solid rgba(103, 80, 164, 0.25);
+        border-top-color: #6750a4;
+        animation: splash-spin 0.8s linear infinite;
+      }
+
+      @keyframes splash-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
   </head>
 
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="splash">
+        <img src="/app-icon.png" alt="Movenet Demo" />
+        <div class="splash-title">Movenet Demo</div>
+        <div class="splash-spinner"></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

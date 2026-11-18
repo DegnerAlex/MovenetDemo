@@ -33,6 +33,7 @@ type AppState = {
     isStoppingCamera: boolean;
     isStreaming: boolean;
     cameraError: string;
+    isBooting: boolean;
 };
 
 class App extends Component<AppProps, AppState> {
@@ -47,6 +48,8 @@ class App extends Component<AppProps, AppState> {
         isStoppingCamera: false,
         isStreaming: false,
         cameraError: "",
+        // The splash overlay stays up until the initial camera list is in.
+        isBooting: true,
     };
 
     private readonly previewRef = createRef<CameraPreview>();
@@ -76,6 +79,7 @@ class App extends Component<AppProps, AppState> {
                 cameras,
                 selectedCamera,
                 isLoadingCameras: false,
+                isBooting: false,
             });
 
             if (selectedCamera) {
@@ -86,6 +90,7 @@ class App extends Component<AppProps, AppState> {
             this.setState({
                 isLoadingCameras: false,
                 cameraError: String(err),
+                isBooting: false,
             });
         }
     };
@@ -188,10 +193,15 @@ class App extends Component<AppProps, AppState> {
     }
 
     render() {
-        const {cameras, selectedCamera, resolutions, selectedResolution, isLoadingCameras, isLoadingResolutions, isStartingCamera, isStoppingCamera, isStreaming, cameraError} = this.state;
+        const {cameras, selectedCamera, resolutions, selectedResolution, isLoadingCameras, isLoadingResolutions, isStartingCamera, isStoppingCamera, isStreaming, cameraError, isBooting} = this.state;
 
         return (
             <div className={`app-root${isStreaming ? " app-root-streaming" : ""}`}>
+                <div className={`app-splash${isBooting ? "" : " app-splash--hidden"}`}>
+                    <img src="/app-icon.png" alt="Movenet Demo" className="app-splash-logo" />
+                    <div className="app-splash-title">Movenet Demo</div>
+                    <div className="app-splash-spinner" />
+                </div>
                 <CameraPreview
                     ref={this.previewRef}
                     isStreaming={isStreaming}
