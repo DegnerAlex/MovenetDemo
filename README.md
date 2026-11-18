@@ -39,8 +39,8 @@ make android-debug  # debug APK for quick device testing
 
 The artifacts land at:
 
-- `src-tauri/Exergame/src-tauri/target/release/bundle/appimage/movenet-demo_0.1.0_amd64.AppImage`
-- `src-tauri/Exergame/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk` (and the `.aab` next to it)
+- `application/src-tauri/target/release/bundle/appimage/movenet-demo_0.1.0_amd64.AppImage`
+- `application/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk` (and the `.aab` next to it)
 
 ## GPU support
 

@@ -6,6 +6,6 @@
 /dist/*
 /dist/**/*
 
-/src-tauri/Exergame/target/
-/src-tauri/Exergame/target/*
-/src-tauri/Exergame/target/**/*
+/application/target/
+/application/target/*
+/application/target/**/*

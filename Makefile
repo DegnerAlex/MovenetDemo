@@ -1,9 +1,9 @@
 # Exergame build commands. All Rust builds run inside the exergame container:
 # the toolchain (ONNX Runtime, CUDA, cuDNN, the Android SDK) lives in the
-# image, not on the host. Artifacts land in src-tauri/Exergame/src-tauri/target
+# image, not on the host. Artifacts land in application/src-tauri/target
 # and gen/android (host-visible through the /srv mount).
 
-APP_DIR := src-tauri/Exergame/src-tauri
+APP_DIR := application/src-tauri
 
 # Deferred (`=`) on purpose: the wildcard must resolve AFTER the build runs,
 # when the freshly built artifact exists.
