@@ -40,7 +40,7 @@ DIST_AAB = $(DIST)/Movenet-Demo-$(VERSION)-android.aab
 
 # All builds share target/ (including the runtime bundle directory), so they
 # are serialized with flock: parallel invocations wait instead of racing.
-LOCK := /tmp/exergame-build.lock
+LOCK := /tmp/movenet-build.lock
 
 .PHONY: help appimage android android-debug dev clean clean-all release upload
 
@@ -56,32 +56,32 @@ help:
 
 # Desktop: release build packaged as an AppImage with the GPU runtime bundle.
 appimage:
-	flock $(LOCK) docker compose run --rm exergame sh -c "cd /srv/src-tauri && cargo tauri build --bundles appimage"
+	flock $(LOCK) docker compose run --rm movenet sh -c "cd /srv/src-tauri && cargo tauri build --bundles appimage"
 	@echo "Artifact: $(APPIMAGE)"
 
-# Android: release build, APK and AAB signed with the exergame keystore.
+# Android: release build, APK and AAB signed with the movenet keystore.
 android:
-	flock $(LOCK) docker compose run --rm exergame sh -c "cd /srv/src-tauri && cargo tauri android build"
+	flock $(LOCK) docker compose run --rm movenet sh -c "cd /srv/src-tauri && cargo tauri android build"
 	@echo "APK: $(APK_RELEASE)"
 	@echo "AAB: $(AAB_RELEASE)"
 
 # Android: debug APK for quick on-device testing.
 android-debug:
-	flock $(LOCK) docker compose run --rm exergame sh -c "cd /srv/src-tauri && cargo tauri android build --debug"
+	flock $(LOCK) docker compose run --rm movenet sh -c "cd /srv/src-tauri && cargo tauri android build --debug"
 	@echo "APK: $(APK_DEBUG)"
 
 # Dev environment: starts the vite dev server and cargo tauri dev.
 dev:
-	docker compose up frontend exergame
+	docker compose up frontend movenet
 
 # Remove the debug build caches. Runs in the container because the build
 # files are created by root; release artifacts are kept.
 clean:
-	flock $(LOCK) docker compose run --rm exergame sh -c "rm -rf /srv/src-tauri/target/debug /srv/src-tauri/target/*/debug"
+	flock $(LOCK) docker compose run --rm movenet sh -c "rm -rf /srv/src-tauri/target/debug /srv/src-tauri/target/*/debug"
 
 # Remove the whole target directory: the next build recompiles everything.
 clean-all:
-	flock $(LOCK) docker compose run --rm exergame sh -c "rm -rf /srv/src-tauri/target"
+	flock $(LOCK) docker compose run --rm movenet sh -c "rm -rf /srv/src-tauri/target"
 
 # Copy the release artifacts to dist/ with clean names and publish them as a
 # GitHub release (tag v$(VERSION) is created at the current HEAD). Requires

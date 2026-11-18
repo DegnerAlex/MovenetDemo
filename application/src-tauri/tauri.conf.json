@@ -3,7 +3,7 @@
   "productName": "Movenet Demo",
   "mainBinaryName": "movenet-demo",
   "version": "0.1.0",
-  "identifier": "org.ergofox.exergame",
+  "identifier": "org.ergofox.movenetdemo",
   "build": {
     "devUrl": "http://localhost:9999",
     "beforeBuildCommand": "pnpm build",

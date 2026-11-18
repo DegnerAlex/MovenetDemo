@@ -1175,26 +1175,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "exergame"
-version = "0.1.0"
-dependencies = [
- "jpeg-decoder",
- "libc",
- "libloading 0.9.1",
- "nokhwa",
- "ort",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-exergame-camera",
- "tauri-plugin-log",
- "tauri-plugin-opener",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "fastrand"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2498,6 +2478,26 @@ dependencies = [
  "libc",
  "wasi",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "movenet-demo"
+version = "0.1.0"
+dependencies = [
+ "jpeg-decoder",
+ "libc",
+ "libloading 0.9.1",
+ "nokhwa",
+ "ort",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-exergame-camera",
+ "tauri-plugin-log",
+ "tauri-plugin-opener",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
