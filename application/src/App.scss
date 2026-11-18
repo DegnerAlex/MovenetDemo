@@ -1,0 +1,358 @@
+// Copyright 2026 Alex Degner (alex@ergofox.me)
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Material-inspired light theme on top of Bulma.
+// The app looks like an Android app in light mode: white cards, pill buttons,
+// chips and the M3 purple accent.
+@forward "bulma";
+
+$primary: #6750a4;
+$on-primary: #ffffff;
+$primary-container: #eaddff;
+$on-primary-container: #21005d;
+$error: #b3261e;
+$on-error: #ffffff;
+$error-container: #f9dedc;
+$on-error-container: #410e0b;
+$surface: #ffffff;
+$surface-variant: #f3edf7;
+$background: #fef7ff;
+$outline: #79747e;
+$outline-variant: #cac4d0;
+$on-surface: #1d1b20;
+$on-surface-muted: #49454f;
+$success-container: #c9efdb;
+$on-success-container: #0f4d2a;
+$warning-container: #fbe9c6;
+$on-warning-container: #5c4300;
+$info-container: #d7e3fb;
+$on-info-container: #0d47a1;
+
+:root {
+  --md-primary: #{$primary};
+  --md-on-primary: #{$on-primary};
+  --md-primary-container: #{$primary-container};
+  --md-on-primary-container: #{$on-primary-container};
+  --md-error: #{$error};
+  --md-on-error: #{$on-error};
+  --md-error-container: #{$error-container};
+  --md-on-error-container: #{$on-error-container};
+  --md-surface: #{$surface};
+  --md-surface-variant: #{$surface-variant};
+  --md-background: #{$background};
+  --md-outline: #{$outline};
+  --md-outline-variant: #{$outline-variant};
+  --md-on-surface: #{$on-surface};
+  --md-on-surface-muted: #{$on-surface-muted};
+  --md-success-container: #{$success-container};
+  --md-on-success-container: #{$on-success-container};
+  --md-warning-container: #{$warning-container};
+  --md-on-warning-container: #{$on-warning-container};
+  --md-info-container: #{$info-container};
+  --md-on-info-container: #{$on-info-container};
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  overflow: hidden;
+  background: $background;
+  color: $on-surface;
+  font-family: Roboto, "Segoe UI", system-ui, sans-serif;
+}
+
+.app-root {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  // The gap above the placeholder picture and below its caption: one
+  // variable keeps the two spacings equal.
+  --preview-gap: clamp(24px, 5vh, 56px);
+  // Keep the bottom controls clear of the Android system navigation panel.
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+
+  // Overlay-style scrollbar: thin and translucent, appears only when the
+  // content actually overflows (with `overflow-y: auto` it is absent when
+  // everything fits).
+  &::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba(121, 116, 126, 0.45);
+    border-radius: 4px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: rgba(121, 116, 126, 0.7);
+  }
+}
+
+.app-root-streaming {
+  padding-bottom: 0;
+}
+
+// The scrollable region with the settings: it slides over the pinned camera
+// preview. The scrollbar is invisible; wheel, touch and keyboard scrolling
+// work. The card starts below the whole placeholder block (top gap +
+// picture 147px + caption gap 12px + caption 44px + bottom gap), so the
+// caption is always fully visible and the surrounding gaps are equal — the
+// placeholder content stays centered in the visible preview area at any
+// height.
+.app-scroll-area {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none; // Firefox
+  padding-top: calc(var(--preview-gap) + 203px + var(--preview-gap));
+  padding-bottom: 0;
+
+  &::-webkit-scrollbar {
+    display: none; // WebKit/Chromium
+  }
+
+  // The card grows to fill the space below its content: no empty gap appears
+  // above the screen bottom on tall layouts, and on short ones it scrolls
+  // normally.
+  > .settings-card {
+    flex: 1 0 auto;
+  }
+}
+
+// The camera preview is a pinned backdrop: it fills the whole app area and
+// stays put while the settings scroll over it. The status row sits at its
+// bottom edge; the canvas keeps its 60px bleed behind that row.
+.camera-preview {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+// Stack of the video canvas and the skeleton overlay. Both canvases get the
+// identical box (including the 60px bleed behind the status row) and the
+// identical object-fit: any geometry difference between them makes the
+// skeleton drift vertically relative to the video image.
+.camera-canvas-stack {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.camera,
+.pose-skeleton {
+  position: absolute;
+  top: 0;
+  left: 0;
+  // Canvas is a replaced element: left/right alone do not stretch it, the
+  // size must be explicit. Both canvases share the identical box (including
+  // the 60px bleed behind the status row) so their bitmaps scale and
+  // position identically.
+  width: 100%;
+  height: calc(100% + 60px);
+  object-fit: contain;
+}
+
+.camera {
+  background: #000;
+}
+
+.pose-skeleton {
+  pointer-events: none;
+}
+
+// Placeholder shown while no camera stream is active: an overlay on top of
+// the always-rendered dark camera canvas, sharing its geometry (including
+// the 60px bleed behind the status row). The picture and the caption sit in
+// the upper zone, which stays visible above the settings card.
+.camera-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: -60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  padding-top: var(--preview-gap);
+  color: #7c8ba1;
+  font-size: 0.9rem;
+  background: transparent;
+
+  // Horizontal margins for the caption; a fixed two-line height keeps the
+  // reserved block (and therefore the surrounding gaps) stable.
+  span {
+    padding: 0 1.5rem;
+    text-align: center;
+    min-height: 44px;
+  }
+
+  svg {
+    opacity: 0.9;
+  }
+}
+
+.settings-card {
+  position: relative;
+  z-index: 1;
+  margin-top: 8px;
+}
+
+// Cards: white Material cards with a soft elevation.
+.box {
+  background: $surface;
+  border: 1px solid $outline-variant;
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+// Status row during streaming: a card overlapping the video with rounded
+// top corners. The bottom extends to the screen edge behind the Android
+// system navigation panel; the safe-area inset pads its content.
+.status-card {
+  background: $surface;
+  border-radius: 16px 16px 0 0;
+  padding: 8px 12px;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.08);
+}
+
+// Buttons: Material pill shape. Default = outlined, variants = filled.
+.button {
+  background: transparent;
+  border: 1px solid $outline;
+  border-radius: 9999px;
+  box-shadow: none;
+  color: $on-surface-muted;
+  font-weight: 500;
+
+  &:hover {
+    background: rgba(103, 80, 164, 0.08);
+    border-color: $primary;
+    color: $primary;
+  }
+
+  &:focus:not(:active),
+  &.is-focused:not(:active) {
+    box-shadow: none;
+  }
+
+  &.is-primary,
+  &.is-info {
+    background: $primary;
+    border: none;
+    color: $on-primary;
+  }
+
+  &.is-danger {
+    background: $error;
+    border: none;
+    color: $on-error;
+  }
+
+  &[disabled] {
+    opacity: 0.38;
+  }
+}
+
+// Tags: Material chips (pill-shaped, outlined).
+.tag {
+  background: $surface;
+  border: 1px solid $outline-variant;
+  border-radius: 9999px;
+  color: $on-surface-muted;
+  font-weight: 500;
+
+  &.is-info {
+    background: $info-container;
+    border-color: transparent;
+    color: $on-info-container;
+  }
+
+  &.is-success {
+    background: $success-container;
+    border-color: transparent;
+    color: $on-success-container;
+  }
+
+  &.is-warning {
+    background: $warning-container;
+    border-color: transparent;
+    color: $on-warning-container;
+  }
+
+  &.is-danger {
+    background: $error-container;
+    border-color: transparent;
+    color: $on-error-container;
+  }
+}
+
+// Headings and text on the light surfaces.
+.title,
+.subtitle,
+.content {
+  color: $on-surface;
+}
+
+// Settings panel: tighter density so everything fits on phone screens.
+.camera-settings {
+  .title.is-5 {
+    font-size: 1rem;
+  }
+
+  .button {
+    padding-left: 0.8em;
+    padding-right: 0.8em;
+  }
+}
+
+@media (max-width: 560px) {
+  .box {
+    padding: 0.9rem;
+  }
+
+  .camera-settings .button {
+    font-size: 0.8rem;
+    height: auto;
+    padding-top: 0.4em;
+    padding-bottom: 0.4em;
+  }
+}
+
+// Notifications: Material error banners.
+.notification {
+  background: $error-container;
+  border-radius: 12px;
+  color: $on-error-container;
+}
